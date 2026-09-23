@@ -4,7 +4,7 @@
 | 이름 | 역할 | GitHub | 담당 기능 |
 |---|---|---|---|
 | 조연우 | 팀장 | @Nimp04 | render.py |
-| 정해원 | 개발 리드 |  | player.py + main.py |
+| 정해원 | 개발 리드 | @hwmacc | player.py + main.py |
 | 장여민 | 문서 담당 | @yeomin04 | - |
 | 김진우 | 리뷰·품질 담당 | @jinwoo0710 | - |
 ## 2. 소통
