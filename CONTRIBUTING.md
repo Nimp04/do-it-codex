@@ -42,10 +42,10 @@ GitHub 이슈 댓글과 카카오톡 채널을 통해 먼저 알립니다.
 
 브랜치 명의 예시는 다음과 같습니다.
 
-template : 작업성격/파일이름/이슈넘버
-example1 : feature/render/#1
-example2 : hotfix/hud/#2
-example1 : docs/README/#3
+template : 작업성격/파일이름/이슈넘버  
+example1 : feature/render/#1  
+example2 : hotfix/hud/#2  
+example1 : docs/README/#3  
 
 작업 성격, 파일 이름이 달라도 이슈 넘버는 고유합니다.
 
