@@ -17,8 +17,8 @@ class Player:
         self.size = (40, 40)
         self.state = PlayerState.JUMPING
 
-        self.move_speed = 300
-        self.jump_speed = 650
+        self.move_speed = 400
+        self.jump_speed = 800
         self.gravity = 1500
         self.previous_bottom = 0
 
