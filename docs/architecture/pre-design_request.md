@@ -1,5 +1,9 @@
 # Jump OverFlow — 개발 리드 사전 구조 설계 요청
 
+2026-10-12 반영: 현재 `main.py`의 호출 뼈대와 합의한 책임을 기준으로 확인 항목을 갱신함.
+모듈 연결 계약과 함수 Interface는 [구조 설계 문서](pre-design.md)를 기준으로 사용함.
+기능 모듈의 실제 구현·연동이 완료됐다는 의미는 아님.
+
 목적:
 각 담당자가 자신의 모듈을 독립적으로 개발한 뒤
 큰 구조 변경 없이 통합할 수 있도록 공통 구조와 데이터 계약을 정의함.
@@ -10,15 +14,18 @@
 
 1. 전체 실행 구조
 
-- main.py가 담당할 역할 정의
+- main.py는 모듈 생성, Game State 소유·변경, 루프, 호출 순서와 데이터 전달을 담당
+- Screen 생성과 렌더링 자원 준비는 Renderer() 내부에서 담당
 - 게임 상태 전환 구조 정의
-  예: WAITING / PLAYING / GAME_OVER / SETTINGS
+  현재 기준: WAITING / SETTING / PLAYING / GAME_OVER
 - 한 프레임에서 각 모듈이 실행되는 순서 정의
 
 예시:
 Input
 → Level / Item 상태 갱신
 → Player 물리·충돌 처리
+→ Collision Event 중재
+→ Camera 갱신 / Player 생존 여부 확인 / Game State 갱신
 → HUD 상태 갱신
 → Render
 
@@ -33,19 +40,25 @@ Input
 main.py
 - 게임 전체 실행 흐름
 - 모듈 호출 및 상태 전환
+- 이벤트·입력·프레임 시간은 프레임당 한 번 수집하여 전달
+- 게임 세부 알고리즘은 해당 모듈에서 처리
 
 render.py
+- Renderer()에서 Screen / Camera / Background / 글꼴 등 출력 자원 준비
 - Background / Map / Player / Object / HUD 렌더링
 - Layer 관리
 - Camera Following
 - 인게임 좌표 → 화면 표시 위치 변환
 ※ Camera 관련 처리는 render.py 내부 책임으로 고정
+- main.py가 camera.update(player.position)를 호출하고 get_world_bounds()의 반환값을 Player에 전달
+- 화면에 보이는 월드 범위 계산은 Renderer, 사망·화면 하단 추락 판정은 Player가 담당
 
 player.py
 - 입력에 따른 플레이어 이동
 - 물리엔진
 - 플레이어 관련 Collision
 - 아이템 효과에 따른 플레이어 상태 변화
+- check_collisions()의 Collision Event 반환, is_alive(world_bounds)의 생존 여부 반환
 
 level_design.py
 - 맵 / 발판 / 장애물 / 적 생성 및 관리
@@ -60,6 +73,7 @@ item.py
 - 아이템 종류 및 효과 정의
 - 아이템 위치 / 상태 관리
 - 획득된 아이템 효과 정보 제공
+- collect(item_id, player, level)에서 아이템 제거와 공개 메서드를 통한 효과 적용
 
 
 3. 공통 데이터 구조
@@ -98,6 +112,10 @@ class / dataclass / dict / pygame.Vector2 등
 
 ※ 좌표는 공통적으로 "인게임(World) 좌표"만 정의
 ※ 화면 좌표와 Camera 좌표는 render.py 내부에서 처리
+※ 월드 원점은 (0, 0), y는 위쪽으로 증가하며 상단 높이에는 상한을 두지 않음
+※ 월드 너비는 화면 해상도와 독립적으로 정의
+※ 객체 position은 월드 좌측 하단, Camera.position은 보이는 월드의 좌측 하단
+※ Renderer가 화면 너비 / WORLD_WIDTH 배율로 위치와 크기를 함께 변환
 
 
 4. 데이터 소유권
@@ -108,8 +126,9 @@ class / dataclass / dict / pygame.Vector2 등
 - Player 위치 → player.py
 - 발판 / 장애물 / 적 → level_design.py
 - Item 위치 / 상태 → item.py
-- Score → hud.py 또는 별도 GameState
+- Score → hud.py
 - Game State → main.py
+- Screen / Camera / Background → render.py
 
 다른 모듈이 데이터를
 직접 수정하는지 / 읽기만 하는지 / 함수 요청으로 변경하는지도 정의
@@ -145,6 +164,8 @@ hud.py → render.py
 
 main.py ↔ 각 모듈
 - initialize / update / reset 등의 호출 규칙
+- HUD.handle_event(event, game_state)는 요청 문자열 또는 None 반환
+- Renderer.render()는 game_state와 각 모듈 데이터를 받아 출력
 
 
 6. Collision 및 Event 처리 구조
@@ -167,6 +188,12 @@ main.py ↔ 각 모듈
 - main.py가 중재
 
 중 적절한 구조 선택.
+
+현재 main.py 연결 계약:
+- Player.check_collisions()는 GAME_OVER / ITEM_COLLECTED dict 목록 반환
+- GAME_OVER 처리 시 main.py가 Game.state를 변경하고 남은 Collision Event 처리는 중단
+- ITEM_COLLECTED 처리 시 main.py가 ItemManager.collect(item_id, player, level)를 호출
+- Effect 종류와 적용 대상 분기는 ItemManager가 담당하며 대상의 내부 상태는 직접 수정하지 않음
 
 
 7. 확장 가능한 Item 구조
@@ -198,6 +225,8 @@ player.py / level_design.py를 매번 크게 수정하지 않도록 구조 설�
   - Player Speed 등
 - 최고점수 / 설정값 저장 방식
 - Import 방향 및 Circular Import 가능성 점검
+- 월드 너비, 카메라 추적 기준, 배경 이동 비율의 임시 값 조정
+- 매 프레임 남은 거리 / 3 방식의 FPS 의존성과 카메라 추적 지연 확인
 
 
 9. 최소 Skeleton 설계
