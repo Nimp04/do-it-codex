@@ -14,6 +14,10 @@ BUTTONS = {  # 상태별 버튼: (표시 텍스트, main에 돌려줄 Action, �
         ("다시하기", "RESTART", pygame.Rect(200, 380, 200, 56)),
         ("홈으로", "RETURN_HOME", pygame.Rect(200, 450, 200, 56)),
     ],
+    "PAUSED": [
+        ("계속하기", "RESUME", pygame.Rect(200, 380, 200, 56)),
+        ("나가기", "RETURN_HOME", pygame.Rect(200, 450, 200, 56)),
+    ],
 }
 
 
@@ -21,6 +25,7 @@ TITLES = {  # PLAYING에는 제목이 없으므로 키도 없다
     "WAITING": "Jump OverFlow",
     "SETTING": "설정",
     "GAME_OVER": "게임 오버",
+    "PAUSED": "일시정지",
 }
 
 
@@ -60,7 +65,7 @@ class HUD:
             texts = [{"text": title, "position": (300, 300)}]
             if self.state == "GAME_OVER":
                 texts.append(
-                    {"text": f"점수 {self.current_score}", "position": (300, 330)}
+                    {"text": f"점수 {self.current_score}", "position": (300, 345)}
                 )
             data["texts"] = texts
 
