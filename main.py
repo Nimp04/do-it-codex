@@ -99,7 +99,7 @@ def update_game(game: Game, dt: float, input_state):
     Player.is_alive(world_bounds)는 사망·화면 하단 추락을 확인해 생존 여부를 반환한다.
     """
     if game.state == GameState.PLAYING:
-        game.level.update(dt, game.player.postion.y)
+        game.level.update(dt, game.player.position.y)
         game.items.update(dt)
         game.player.update(dt, input_state)
 
