@@ -50,7 +50,7 @@ render.py
 - Camera Following
 - 인게임 좌표 → 화면 표시 위치 변환
 ※ Camera 관련 처리는 render.py 내부 책임으로 고정
-- main.py가 camera.update(player.position)를 호출하고 get_world_bounds()의 반환값을 Player에 전달
+- main.py가 camera.update(player.position, dt)를 호출하고 get_world_bounds()의 반환값을 Player에 전달
 - 화면에 보이는 월드 범위 계산은 Renderer, 사망·화면 하단 추락 판정은 Player가 담당
 
 player.py
@@ -226,7 +226,7 @@ player.py / level_design.py를 매번 크게 수정하지 않도록 구조 설�
 - 최고점수 / 설정값 저장 방식
 - Import 방향 및 Circular Import 가능성 점검
 - 월드 너비, 카메라 추적 기준, 배경 이동 비율의 임시 값 조정
-- 매 프레임 남은 거리 / 3 방식의 FPS 의존성과 카메라 추적 지연 확인
+- 60FPS 기준 남은 거리의 1/10을 따르는 dt 기반 추적과 카메라 추적 지연 확인
 
 
 9. 최소 Skeleton 설계

@@ -207,7 +207,7 @@ Screen 좌표
 
 Camera 좌표 및 Screen 좌표 계산은 `render.py` 내부에서만 수행한다.
 
-`main.py`는 `renderer.camera.update(player.position)`을 호출하고,
+`main.py`는 `renderer.camera.update(player.position, dt)`를 호출하고,
 `renderer.get_world_bounds()`의 결과를 Player에 전달한다. 카메라 이동과 범위 계산은
 Renderer / Camera가, 사망·화면 하단 추락 판정은 Player가 수행한다.
 
@@ -430,7 +430,7 @@ Game.state가 PLAYING이면:
     반환된 Event를 순서대로 handle_game_event()에 전달
     GAME_OVER를 처리하면 남은 Collision Event는 처리하지 않음
 
-    Renderer.camera.update(Player.position)
+    Renderer.camera.update(Player.position, dt)
 
     여전히 PLAYING이면:
         world_bounds = Renderer.get_world_bounds()
@@ -739,8 +739,8 @@ class Camera:
     def reset(self):
         ...
 
-    def update(self, player_position):
-        """플레이어를 기준으로 위쪽으로만 이동한다."""
+    def update(self, player_position, dt):
+        """경과 시간에 따라 플레이어를 추적하며 위쪽으로만 이동한다."""
         ...
 
 
@@ -805,13 +805,13 @@ class Renderer:
 ### 카메라와 배경 구상
 
 플레이어와 카메라의 월드 y 차이가 `CAMERA_FOLLOW_THRESHOLD`를 초과하면
-목표 카메라 y를 구하고, 목표까지 남은 거리의 `1 / CAMERA_FOLLOW_DIVISOR`씩 상승한다.
-목표 좌표 자체를 나누는 것이 아니라 현재 위치에서 남은 거리를 나눈다.
+목표 카메라 y를 구하고, 목표까지 남은 거리에 시간 기반 추적 비율을 곱해 상승한다.
+추적 비율은 `1 - (1 - 1 / CAMERA_FOLLOW_DIVISOR) ** (dt * 60)`이다.
+60FPS에서는 프레임당 남은 거리의 1/10씩 따라간다.
 플레이어가 내려갈 때 카메라는 내려가지 않는다.
 
-현재 `Camera.update(player_position)` 계약은 매 프레임 호출하는 방식이다.
-FPS에 따라 추적 속도가 달라지며, `dt` 보정 여부와 강한 점프에서의 추적 지연은
-구현 시 확인해야 한다.
+`Camera.update(player_position, dt)`는 매 프레임 초 단위 경과 시간을 전달받는다.
+목표 위치가 같으면 FPS가 달라도 같은 경과 시간 후 추적 위치가 같다.
 
 Background는 카메라 이동량의 `BACKGROUND_SCROLL_RATIO`만큼 움직여 원근감을 표현한다.
 하늘·구름 이미지를 세로로 반복해 빈 공간 없이 이어지도록 출력한다.
@@ -828,8 +828,8 @@ Background는 카메라 이동량의 `BACKGROUND_SCROLL_RATIO`만큼 움직여 �
 | `SCREEN_SIZE` | `(600, 800)` | Renderer의 화면 생성에 사용 |
 | `WORLD_ORIGIN` | `(0, 0)` | 월드 원점 |
 | `WORLD_WIDTH` | `600` | 임시 월드 너비. 화면 너비와 별도로 조정 |
-| `CAMERA_FOLLOW_THRESHOLD` | `480` | 임시 추적 기준 높이. 월드 단위 |
-| `CAMERA_FOLLOW_DIVISOR` | `3` | 남은 추적 거리의 분모 |
+| `CAMERA_FOLLOW_THRESHOLD` | `300` | 임시 추적 기준 높이. 월드 단위 |
+| `CAMERA_FOLLOW_DIVISOR` | `10` | 60FPS 기준 프레임당 추적 비율의 분모 |
 | `BACKGROUND_SCROLL_RATIO` | `0.25` | 임시 배경 이동 비율 |
 
 화면과 월드의 현재 너비 값이 같아도 같은 좌표계는 아니다.

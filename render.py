@@ -21,12 +21,13 @@ class Camera:
     def reset(self):
         self.position.update(WORLD_ORIGIN)
 
-    def update(self, player_position):
+    def update(self, player_position, dt):
         target_y = player_position.y - CAMERA_FOLLOW_THRESHOLD
         distance = target_y - self.position.y
         if distance > 0:
-            # shortcut: 고정 FPS에서 거리/3을 적용한다. 가변 FPS 지원 시 dt를 받는다.
-            self.position.y += distance / CAMERA_FOLLOW_DIVISOR
+            # 60FPS 기준 추적 비율을 경과 시간에 맞춰 환산한다.
+            follow_ratio = 1 - (1 - 1 / CAMERA_FOLLOW_DIVISOR) ** (dt * 60)
+            self.position.y += distance * follow_ratio
 
 
 class Background:
