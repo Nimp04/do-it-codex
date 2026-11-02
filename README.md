@@ -5,8 +5,30 @@ A repository for OSS class project
 Doodle Jump 기반 종 스크롤 방식 게임 개발하기
 
 
-## 설치 방법
-Latest Release를 통해 Installer 다운로드 후 설치.
+## 설치 및 실행 방법 (Windows)
+
+1. [최신 릴리스](https://github.com/Nimp04/do-it-codex/releases/latest)에서
+   **Assets → JumpOverflow-Setup.exe**를 다운로드합니다.
+2. 설치 파일을 실행하고 설치 위치를 선택한 뒤 설치를 완료합니다.
+   기본 위치는 현재 사용자의 `%LOCALAPPDATA%\Programs\JumpOverflow`입니다.
+3. Windows 시작 메뉴에서 **JumpOverflow**를 검색해 실행합니다.
+   설치 폴더의 `JumpOverflow.exe`를 직접 실행해도 됩니다.
+4. 게임 화면에서 **시작**을 누릅니다. **← / →** 또는 **A / D**로 좌우 이동하며,
+   발판에 착지하면 자동으로 점프합니다.
+
+Python이나 NSIS를 별도로 설치할 필요는 없습니다.
+게임을 종료하려면 창의 닫기 버튼을 누르세요.
+제거하려면 Windows 설정의 앱 목록에서 **JumpOverflow**를 선택해 제거합니다.
+
+## 소스에서 실행 (개발용)
+
+Python 3.11 이상을 설치하고 저장소를 내려받은 뒤, 저장소 루트에서 실행합니다.
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe main.py
+```
 
 ## Windows EXE 빌드
 프로젝트 가상환경을 활성화한 Windows에서 저장소 루트를 기준으로 실행합니다.
@@ -20,6 +42,37 @@ python -m PyInstaller --onefile --windowed --name JumpOverflow --specpath build 
 `dist/JumpOverflow.exe`를 생성합니다. 실행 시 콘솔 창은 표시하지 않습니다.
 NSIS 설치파일을 만들 때 이 EXE를 포함합니다.
 현재 한글 표시는 Windows의 맑은 고딕 글꼴을 사용합니다.
+
+## NSIS 설치 파일 빌드
+
+NSIS 3을 설치하고 위의 EXE 빌드를 마친 뒤, 저장소 루트에서 실행합니다.
+NSIS 실행 파일은 PATH 또는 설치 레지스트리에서 찾으므로 개인 PC 경로를 적지 않습니다.
+
+```powershell
+$ErrorActionPreference = 'Stop'
+$nsisCompiler = Get-Command makensis.exe -ErrorAction SilentlyContinue
+if ($nsisCompiler) {
+    $nsisCompilerPath = $nsisCompiler.Source
+} else {
+    $nsisInstallPath = @(
+        'HKLM:\SOFTWARE\WOW6432Node\NSIS'
+        'HKLM:\SOFTWARE\NSIS'
+        'HKCU:\SOFTWARE\NSIS'
+    ) | ForEach-Object {
+        (Get-ItemProperty -LiteralPath $_ -ErrorAction SilentlyContinue).'(default)'
+    } | Where-Object { $_ -and (Test-Path -LiteralPath (Join-Path $_ 'makensis.exe')) } | Select-Object -First 1
+    if (-not $nsisInstallPath) { throw 'NSIS 3을 설치하거나 makensis.exe를 PATH에 추가하세요.' }
+    $nsisCompilerPath = Join-Path $nsisInstallPath 'makensis.exe'
+}
+& $nsisCompilerPath /INPUTCHARSET UTF8 /WX .\installer.nsi
+if ($LASTEXITCODE -ne 0) { throw 'NSIS 설치 파일 빌드에 실패했습니다.' }
+```
+
+결과는 `dist/JumpOverflow-Setup.exe`입니다. `installer.nsi`의 파일 경로는
+스크립트 폴더 기준 상대경로이며, 기본 설치 위치는 설치하는 사용자의
+`$LOCALAPPDATA\Programs\JumpOverflow`입니다. 시작 메뉴 바로가기와 앱 제거를 지원합니다.
+`build/`, `dist/`는 Git에서 제외되므로 소스와 `installer.nsi`만 커밋하고,
+설치 EXE는 GitHub Releases에 첨부합니다.
 
 ## 팀 구성
 | 직책 | 이름 |
