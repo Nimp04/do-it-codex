@@ -11,9 +11,12 @@ Doodle Jump 기반 종 스크롤 방식 게임 개발하기
    **Assets → JumpOverflow-Setup.exe**를 다운로드합니다.
 2. 설치 파일을 실행하고 설치 위치를 선택한 뒤 설치를 완료합니다.
    기본 위치는 현재 사용자의 `%LOCALAPPDATA%\Programs\JumpOverflow`입니다.
-3. Windows 시작 메뉴에서 **JumpOverflow**를 검색해 실행합니다.
+3. 설치 완료 화면에서 **바탕화면 바로가기 만들기**, **설치 폴더 열기**를
+   각각 선택할 수 있습니다. 두 옵션은 기본적으로 선택되어 있으며,
+   원하지 않는 옵션의 체크를 해제한 뒤 **마침**을 누르면 적용됩니다.
+4. Windows 시작 메뉴에서 **JumpOverflow**를 검색하거나, 생성한 바탕화면 바로가기로 실행합니다.
    설치 폴더의 `JumpOverflow.exe`를 직접 실행해도 됩니다.
-4. 게임 화면에서 **시작**을 누릅니다. **← / →** 또는 **A / D**로 좌우 이동하며,
+5. 게임 화면에서 **시작**을 누릅니다. **← / →** 또는 **A / D**로 좌우 이동하며,
    발판에 착지하면 자동으로 점프합니다.
 
 Python이나 NSIS를 별도로 설치할 필요는 없습니다.
@@ -70,7 +73,8 @@ if ($LASTEXITCODE -ne 0) { throw 'NSIS 설치 파일 빌드에 실패했습니�
 
 결과는 `dist/JumpOverflow-Setup.exe`입니다. `installer.nsi`의 파일 경로는
 스크립트 폴더 기준 상대경로이며, 기본 설치 위치는 설치하는 사용자의
-`$LOCALAPPDATA\Programs\JumpOverflow`입니다. 시작 메뉴 바로가기와 앱 제거를 지원합니다.
+`$LOCALAPPDATA\Programs\JumpOverflow`입니다. 시작 메뉴 바로가기와 앱 제거를 지원하며,
+완료 화면에서 바탕화면 바로가기 생성과 설치 폴더 열기를 선택할 수 있습니다.
 `build/`, `dist/`는 Git에서 제외되므로 소스와 `installer.nsi`만 커밋하고,
 설치 EXE는 GitHub Releases에 첨부합니다.
 
