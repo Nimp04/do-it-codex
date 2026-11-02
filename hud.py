@@ -34,15 +34,21 @@ class HUD:
         self.current_score = 0
         self.high_score = 0
         self.state = "WAITING"
+        self.baseline_y = None
 
     def reset(self):  # 한 판 시작: 현재 점수만 0으로, 최고 점수는 남김
         self.current_score = 0
+        self.baseline_y = None
 
     def update(self, game_state, player):  # 매 프레임 main이 호출함
         self.state = str(game_state)
         if self.state == "PLAYING":
-            # 점수 = 올라간 월드 높이 / 100. max라서 떨어져도 줄지 않음
-            self.current_score = max(self.current_score, int(player.position.y / 100))
+            # 리셋 후 첫 프레임의 위치를 기준점으로 삼아, 스폰 좌표와 무관하게
+            # 거기서 "올라간 높이"만 점수로 센다. max라서 떨어져도 줄지 않음
+            if self.baseline_y is None:
+                self.baseline_y = player.position.y
+            climbed = player.position.y - self.baseline_y
+            self.current_score = max(self.current_score, int(climbed / 100))
             self.high_score = max(self.high_score, self.current_score)
 
     def handle_event(self, event, game_state=None):  # 버튼 클릭 → Action, 없으면 None
