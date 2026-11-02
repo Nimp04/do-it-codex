@@ -64,6 +64,9 @@ class MainTests(unittest.TestCase):
         self.game.state = main.GameState.PLAYING
         self.game.player.is_alive.return_value = False
         main.update_game(self.game, 0.02, [])
+        self.game.renderer.camera.update.assert_called_once_with(
+            self.game.player.position, 0.02
+        )
         self.assertEqual(
             [call[0] for call in calls.mock_calls],
             ["move", "camera", "bounds", "alive"],
