@@ -342,7 +342,8 @@ Item
 ```
 
 `texts`와 `buttons`는 선택적인 목록이며, 없으면 출력하지 않는다.
-각 위치와 Rect는 화면 좌표이며 카메라의 영향을 받지 않는다. 문구 위치는 화면 좌측 상단 기준이다.
+각 위치와 Rect는 화면 좌표이며 카메라의 영향을 받지 않는다. 일반 문구는 기본적으로 화면 가로 중앙에 정렬하며 `position`의 y만 사용한다.
+좌상단 Score / Best와 버튼 문구는 `draw_text(..., centered=False)`로 지정한 좌측 상단 위치에 출력한다.
 버튼 배치와 클릭 판정, 요청 반환은 HUD가 담당하고 Renderer는 해당 Rect와 문구를 출력한다.
 PLAYING / GAME_OVER에서는 Score / Best를 출력하고 월드 객체를 그린다.
 WAITING / SETTING에서는 배경과 HUD만 출력한다.
@@ -778,8 +779,8 @@ class Renderer:
         """객체의 위치 기준점과 월드 크기를 고려하여 출력한다."""
         ...
 
-    def draw_text(self, text, screen_position):
-        """카메라와 관계없는 화면 위치에 텍스트를 출력한다."""
+    def draw_text(self, text, screen_position, *, centered=True):
+        """기본은 화면 가로 중앙 정렬이며, centered=False면 전달 위치를 사용한다."""
         ...
 
     def render(

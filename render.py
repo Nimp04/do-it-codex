@@ -96,8 +96,14 @@ class Renderer:
         )
         pygame.draw.rect(self.screen, color, rect)
 
-    def draw_text(self, text: str, screen_position):
+    def draw_text(self, text: str, screen_position, *, centered=True):
+        """기본은 화면 가로 중앙 정렬이며, centered=False면 전달 위치를 사용한다."""
         label = self.font.render(text, True, (25, 30, 40))
+        if centered:
+            screen_position = (
+                (self.screen.get_width() - label.get_width()) / 2,
+                screen_position[1],
+            )
         self.screen.blit(label, screen_position)
 
     def render(
@@ -127,8 +133,8 @@ class Renderer:
         if hud is not None:
             ui = hud.get_ui_data()
             if game_state in ("PLAYING", "GAME_OVER"):
-                self.draw_text(f"Score: {ui['current_score']}", (12, 12))
-                self.draw_text(f"Best: {ui['high_score']}", (12, 44))
+                self.draw_text(f"Score: {ui['current_score']}", (12, 12), centered=False)
+                self.draw_text(f"Best: {ui['high_score']}", (12, 44), centered=False)
             for text in ui.get("texts", ()):
                 self.draw_text(text["text"], text["position"])
             for button in ui.get("buttons", ()):
@@ -138,6 +144,7 @@ class Renderer:
                 self.draw_text(
                     button["text"],
                     (rect.centerx - width / 2, rect.centery - height / 2),
+                    centered=False,
                 )
 
         pygame.display.flip()
