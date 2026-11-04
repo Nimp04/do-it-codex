@@ -9,9 +9,9 @@ import pygame
 
 import main
 import render
+from hud import HUD
 from config import (
     BACKGROUND_SCROLL_RATIO,
-    CAMERA_FOLLOW_DIVISOR,
     CAMERA_FOLLOW_THRESHOLD,
     WORLD_ORIGIN,
 )
@@ -28,26 +28,49 @@ class RendererTests(unittest.TestCase):
     def tearDown(self):
         pygame.quit()
 
-    def test_camera_follows_by_one_third_and_never_descends(self):
+    def test_camera_follows_by_one_tenth_at_60_fps_and_never_descends(self):
         camera = self.renderer.camera
         player = pygame.Vector2(100, CAMERA_FOLLOW_THRESHOLD - 1)
-        camera.update(player)
+        camera.update(player, 1 / 60)
         self.assertEqual(camera.position, pygame.Vector2(WORLD_ORIGIN))
 
         player.y = CAMERA_FOLLOW_THRESHOLD + 300
-        camera.update(player)
-        self.assertEqual(camera.position.y, 300 / CAMERA_FOLLOW_DIVISOR)
+        camera.update(player, 1 / 60)
+        self.assertAlmostEqual(camera.position.y, 30)
         before = camera.position.y
-        camera.update(player)
+        camera.update(player, 1 / 60)
         self.assertAlmostEqual(
-            camera.position.y, before + (300 - before) / CAMERA_FOLLOW_DIVISOR
+            camera.position.y, before + (300 - before) / 10
         )
         self.assertEqual(player.y, CAMERA_FOLLOW_THRESHOLD + 300)
         before = camera.position.copy()
-        camera.update(pygame.Vector2(100, -100))
+        camera.update(pygame.Vector2(100, -100), 1 / 60)
         self.assertEqual(camera.position, before)
         self.renderer.reset()
         self.assertEqual(camera.position, pygame.Vector2(WORLD_ORIGIN))
+
+    def test_camera_follow_matches_elapsed_time_across_frame_rates(self):
+        player = pygame.Vector2(100, CAMERA_FOLLOW_THRESHOLD + 300)
+        for timesteps in (
+            [1 / 30] * 15,
+            [1 / 60] * 30,
+            [1 / 120] * 60,
+            [0, 0.01, 0.04, 0.1, 0.35],
+        ):
+            with self.subTest(timesteps=timesteps):
+                camera = render.Camera()
+                for dt in timesteps:
+                    camera.update(player, dt)
+                self.assertAlmostEqual(camera.position.y, 300 * (1 - 0.9 ** 30))
+
+    def test_camera_stays_still_without_elapsed_time_and_does_not_overshoot(self):
+        camera = self.renderer.camera
+        player = pygame.Vector2(100, CAMERA_FOLLOW_THRESHOLD + 300)
+        camera.update(player, 0)
+        self.assertEqual(camera.position, pygame.Vector2(WORLD_ORIGIN))
+        camera.update(player, 1)
+        self.assertAlmostEqual(camera.position.y, 300 * (1 - 0.9 ** 60))
+        self.assertLess(camera.position.y, 300)
 
     def test_world_bounds_and_bottom_left_coordinates_with_scaling(self):
         with patch.object(render, "SCREEN_SIZE", (300, 400)):
@@ -111,6 +134,29 @@ class RendererTests(unittest.TestCase):
         renderer.render("PLAYING", player, [])
         self.assertEqual(renderer.screen.get_at((101, 799))[:3], (55, 110, 220))
 
+    def test_draw_text_centers_by_default_and_allows_explicit_position(self):
+        renderer = self.renderer
+        with patch.object(renderer, "screen", wraps=renderer.screen) as screen:
+            for value in ("Jump OverFlow", "게임 오버", "점수 123"):
+                with self.subTest(text=value):
+                    renderer.draw_text(value, (12, 90))
+                    label, position = screen.blit.call_args.args
+                    self.assertEqual(position[0] + label.get_width() / 2, screen.get_width() / 2)
+                    self.assertEqual(position[1], 90)
+                    renderer.draw_text(value, (12, 90), centered=False)
+                    self.assertEqual(screen.blit.call_args.args[1], (12, 90))
+
+    def test_all_hud_texts_use_default_alignment(self):
+        renderer = self.renderer
+        hud = HUD()
+        for state in ("WAITING", "PAUSED", "SETTING", "GAME_OVER"):
+            with self.subTest(state=state):
+                hud.state = state
+                with patch.object(renderer, "draw_text", wraps=renderer.draw_text) as draw:
+                    renderer.render(state, None, [], hud=hud)
+                for text in hud.get_ui_data()["texts"]:
+                    draw.assert_any_call(text["text"], text["position"])
+
     def test_main_render_call_and_screen_fixed_hud_in_all_states(self):
         renderer = self.renderer
         ui = {
@@ -137,17 +183,24 @@ class RendererTests(unittest.TestCase):
                 game.state = state
                 main.render_frame(game)
                 text.assert_any_call("Jump OverFlow", (12, 90))
+                width, height = renderer.font.size("Start")
+                rect = ui["buttons"][0]["rect"]
+                text.assert_any_call(
+                    "Start", (rect.centerx - width / 2, rect.centery - height / 2),
+                    centered=False,
+                )
                 self.assertEqual(
                     renderer.screen.get_at((21, 151))[:3], (245, 250, 255)
                 )
                 if state in (main.GameState.PLAYING, main.GameState.GAME_OVER):
-                    text.assert_any_call("Score: 10", (12, 12))
+                    text.assert_any_call("Score: 10", (12, 12), centered=False)
+                    text.assert_any_call("Best: 20", (12, 44), centered=False)
                 text.reset_mock()
 
-            renderer.camera.update(pygame.Vector2(500, 1_000_000))
+            renderer.camera.update(pygame.Vector2(500, 1_000_000), 1 / 60)
             main.render_frame(game)
             text.assert_any_call("Jump OverFlow", (12, 90))
-            text.assert_any_call("Score: 10", (12, 12))
+            text.assert_any_call("Score: 10", (12, 12), centered=False)
 
 
 if __name__ == "__main__":

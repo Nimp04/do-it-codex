@@ -21,12 +21,13 @@ class Camera:
     def reset(self):
         self.position.update(WORLD_ORIGIN)
 
-    def update(self, player_position):
+    def update(self, player_position, dt):
         target_y = player_position.y - CAMERA_FOLLOW_THRESHOLD
         distance = target_y - self.position.y
         if distance > 0:
-            # shortcut: 고정 FPS에서 거리/3을 적용한다. 가변 FPS 지원 시 dt를 받는다.
-            self.position.y += distance / CAMERA_FOLLOW_DIVISOR
+            # 60FPS 기준 추적 비율을 경과 시간에 맞춰 환산한다.
+            follow_ratio = 1 - (1 - 1 / CAMERA_FOLLOW_DIVISOR) ** (dt * 60)
+            self.position.y += distance * follow_ratio
 
 
 class Background:
@@ -95,8 +96,14 @@ class Renderer:
         )
         pygame.draw.rect(self.screen, color, rect)
 
-    def draw_text(self, text: str, screen_position):
+    def draw_text(self, text: str, screen_position, *, centered=True):
+        """기본은 화면 가로 중앙 정렬이며, centered=False면 전달 위치를 사용한다."""
         label = self.font.render(text, True, (25, 30, 40))
+        if centered:
+            screen_position = (
+                (self.screen.get_width() - label.get_width()) / 2,
+                screen_position[1],
+            )
         self.screen.blit(label, screen_position)
 
     def render(
@@ -126,8 +133,8 @@ class Renderer:
         if hud is not None:
             ui = hud.get_ui_data()
             if game_state in ("PLAYING", "GAME_OVER"):
-                self.draw_text(f"Score: {ui['current_score']}", (12, 12))
-                self.draw_text(f"Best: {ui['high_score']}", (12, 44))
+                self.draw_text(f"Score: {ui['current_score']}", (12, 12), centered=False)
+                self.draw_text(f"Best: {ui['high_score']}", (12, 44), centered=False)
             for text in ui.get("texts", ()):
                 self.draw_text(text["text"], text["position"])
             for button in ui.get("buttons", ()):
@@ -137,6 +144,7 @@ class Renderer:
                 self.draw_text(
                     button["text"],
                     (rect.centerx - width / 2, rect.centery - height / 2),
+                    centered=False,
                 )
 
         pygame.display.flip()
