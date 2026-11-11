@@ -106,7 +106,6 @@ def update_game(game: Game, dt: float, input_state):
         collision_events = game.player.check_collisions(
             game.level.get_platforms(),
             game.level.get_obstacles(),
-            game.level.get_enemies(),
             game.items.get_items(),
         )
         for event in collision_events:
@@ -129,7 +128,6 @@ def render_frame(game: Game):
         player=game.player,
         platforms=game.level.get_platforms(),
         obstacles=game.level.get_obstacles(),
-        enemies=game.level.get_enemies(),
         items=game.items.get_items(),
         hud=game.hud,
     )
