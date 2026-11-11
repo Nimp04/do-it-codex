@@ -35,10 +35,12 @@ class HUD:
         self.high_score = 0
         self.state = "WAITING"
         self.baseline_y = None
+        self.item_slots = [None, None]
 
     def reset(self):  # 한 판 시작: 현재 점수만 0으로, 최고 점수는 남김
         self.current_score = 0
         self.baseline_y = None
+        self.item_slots = [None, None]
 
     def update(self, game_state, player):  # 매 프레임 main이 호출함
         self.state = str(game_state)
@@ -50,6 +52,14 @@ class HUD:
             climbed = player.position.y - self.baseline_y
             self.current_score = max(self.current_score, int(climbed / 100))
             self.high_score = max(self.high_score, self.current_score)
+
+        # 인벤토리는 item.py(ItemManager)가 player.item_slots에 써두며,
+        # 여기서는 표시용으로 읽기만 한다(Player 상태는 바꾸지 않음).
+        slots = getattr(player, "item_slots", None)
+        if isinstance(slots, list) and len(slots) == 2:
+            self.item_slots = list(slots)
+        else:
+            self.item_slots = [None, None]
 
     def handle_event(self, event, game_state=None):  # 버튼 클릭 → Action, 없으면 None
         # game_state는 설계 문서상 생략 가능. 없으면 update가 받아둔 상태를 씀
@@ -65,6 +75,7 @@ class HUD:
         data = {
             "current_score": self.current_score,
             "high_score": self.high_score,
+            "item_slots": list(self.item_slots),  # 2칸, 빈 칸은 None
         }
         title = TITLES.get(self.state)
         if title:  # 제목과 버튼은 해당 상태일 때만 키를 넣음
