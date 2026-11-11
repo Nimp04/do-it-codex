@@ -14,3 +14,5 @@ CAMERA_FOLLOW_THRESHOLD = 300  # 임시 값. 플레이어와 카메라의 월드
 CAMERA_FOLLOW_DIVISOR = 10  # 60FPS 기준 프레임당 남은 거리의 1/10씩 따라간다.
 
 BACKGROUND_SCROLL_RATIO = 0.25  # 임시 값. 카메라 이동량 중 배경에 반영할 비율.
+
+PLAYER_SIZE = (50, 50)  # 플레이어의 크기
