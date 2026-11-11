@@ -65,9 +65,9 @@ class Player:
         else:
             self.state = PlayerState.FALLING
 
-    def check_collisions(self, platforms, obstacles, enemies, items):
+    def check_collisions(self, platforms, obstacles, items):
         if self._pending_motion is None:
-            return self._check_collisions(platforms, obstacles, enemies, items)
+            return self._check_collisions(platforms, obstacles, items)
 
         position, velocity, remaining = self._pending_motion
         self._pending_motion = None
@@ -75,12 +75,12 @@ class Player:
         self.velocity.update(velocity)
         if remaining == 0:
             self._move(0)
-            return self._check_collisions(platforms, obstacles, enemies, items)
+            return self._check_collisions(platforms, obstacles, items)
         events = []
         while remaining > 0:
             step = min(remaining, 1 / 120)
             self._move(step)
-            for event in self._check_collisions(platforms, obstacles, enemies, items):
+            for event in self._check_collisions(platforms, obstacles, items):
                 if event["type"] == "GAME_OVER":
                     return [event]
                 if event not in events:
@@ -88,12 +88,11 @@ class Player:
             remaining -= step
         return events
 
-    def _check_collisions(self, platforms, obstacles, enemies, items):
+    def _check_collisions(self, platforms, obstacles, items):
         """좌측 하단 기준으로 판정하며, 다른 모듈의 변경은 이벤트로 요청한다."""
-        for objects in (obstacles, enemies):
-            for obj in objects:
-                if self._overlaps(obj):
-                    return [{"type": "GAME_OVER"}]
+        for obstacle in obstacles:
+            if self._overlaps(obstacle):
+                return [{"type": "GAME_OVER"}]
 
         events = [
             {"type": "ITEM_COLLECTED", "item_id": item.id}
