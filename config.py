@@ -15,4 +15,4 @@ CAMERA_FOLLOW_DIVISOR = 10  # 60FPS 기준 프레임당 남은 거리의 1/10씩
 
 BACKGROUND_SCROLL_RATIO = 0.25  # 임시 값. 카메라 이동량 중 배경에 반영할 비율.
 
-PLAYER_SIZE = (50, 50)  # 플레이어의 크기
+PLAYER_SIZE = (40, 40)  # 플레이어의 크기
