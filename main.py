@@ -128,7 +128,6 @@ def render_frame(game: Game):
         player=game.player,
         platforms=game.level.get_platforms(),
         obstacles=game.level.get_obstacles(),
-        enemies=game.level.get_enemies(),
         items=game.items.get_items(),
         hud=game.hud,
     )
