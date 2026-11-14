@@ -34,18 +34,20 @@ def initialize_game() -> Game:
     from render import Renderer
 
     renderer = Renderer()
+    items = ItemManager()
     return Game(
         player=Player(),
-        level=Level(),
-        items=ItemManager(),
+        level=Level(items),
+        items=items,
         hud=HUD(),
         renderer=renderer,
     )
 
 
 def reset_game(game: Game):
-    game.level.reset()
+    # level.reset()이 배치한 아이템을 items.reset()이 지우지 않도록 먼저 비운다.
     game.items.reset()
+    game.level.reset()
     game.player.reset(game.level.get_spawn_position())
     game.hud.reset()
     game.renderer.reset()
