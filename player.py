@@ -5,7 +5,7 @@ from enum import StrEnum
 from math import isfinite
 import pygame
 
-from config import WORLD_ORIGIN, WORLD_WIDTH
+from config import WORLD_ORIGIN, WORLD_WIDTH,PLAYER_SIZE
 
 class PlayerState(StrEnum):
     JUMPING = "JUMPING"
@@ -16,7 +16,7 @@ class Player:
     def __init__(self):
         self.position = pygame.Vector2(0, 0)
         self.velocity = pygame.Vector2(0, 0)
-        self.size = (40, 40)
+        self.size = PLAYER_SIZE
         self.state = PlayerState.FALLING
 
         self.move_speed = 400
