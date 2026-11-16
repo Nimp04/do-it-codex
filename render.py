@@ -126,7 +126,8 @@ class Renderer:
     ):
         """카메라는 main이 갱신하며, 여기서는 객체 상태를 읽고 출력만 한다.
 
-        HUD.get_ui_data(): current_score, high_score, 선택적인 texts / buttons.
+        HUD.get_ui_data(): current_score, high_score, 선택적인 item_slots / texts / buttons.
+        item_slots: 아이템 종류 또는 None을 담은 길이 2 목록. 화면 우상단에 표시한다.
         texts: {"text": str, "position": 화면 좌표} 목록.
         buttons: {"text": str, "rect": pygame.Rect(화면 좌표)} 목록.
         """
@@ -150,6 +151,19 @@ class Renderer:
             if game_state in ("PLAYING", "GAME_OVER"):
                 self.draw_text(f"Score: {ui['current_score']}", (12, 12), centered=False)
                 self.draw_text(f"Best: {ui['high_score']}", (12, 44), centered=False)
+                for index, item_type in enumerate(ui.get("item_slots", (None, None))):
+                    rect = pygame.Rect(
+                        self.screen.get_width() - 152 + index * 76, 12, 64, 64
+                    )
+                    pygame.draw.rect(self.screen, (245, 250, 255), rect)
+                    if item_type is not None:
+                        pygame.draw.rect(
+                            self.screen, ITEM_STYLES[item_type][1], rect.inflate(-12, -12)
+                        )
+                        self.draw_item_label(item_type, rect)
+                    pygame.draw.rect(
+                        self.screen, (25, 30, 40), rect, width=3 if index == 0 else 1
+                    )
             for text in ui.get("texts", ()):
                 self.draw_text(text["text"], text["position"])
             for button in ui.get("buttons", ()):

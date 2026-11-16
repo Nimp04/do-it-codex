@@ -152,6 +152,22 @@ class RendererTests(unittest.TestCase):
             ))
         self.assertEqual(len(set(colors)), 3)
 
+    def test_item_slots_follow_hud_order_and_stay_fixed_when_camera_moves(self):
+        hud = HUD()
+        for slots, expected_colors in (
+            ([DOUBLE_JUMP, GHOST], ((245, 185, 40), (190, 150, 240))),
+            ([GHOST, DOUBLE_JUMP], ((190, 150, 240), (245, 185, 40))),
+            ([None, SHRINK], ((245, 250, 255), (80, 200, 190))),
+            ([None, None], ((245, 250, 255), (245, 250, 255))),
+        ):
+            with self.subTest(slots=slots):
+                hud.item_slots = list(slots)
+                self.renderer.camera.position.y += 1000
+                self.renderer.render("PLAYING", None, [], hud=hud)
+                for position, color in zip(((455, 19), (531, 19)), expected_colors):
+                    self.assertEqual(self.renderer.screen.get_at(position)[:3], color)
+                self.assertEqual(hud.item_slots, slots)
+
     def test_draw_text_centers_by_default_and_allows_explicit_position(self):
         renderer = self.renderer
         with patch.object(renderer, "screen", wraps=renderer.screen) as screen:
