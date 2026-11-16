@@ -172,7 +172,6 @@ class RendererTests(unittest.TestCase):
             level=SimpleNamespace(
                 get_platforms=lambda: [],
                 get_obstacles=lambda: [],
-                get_enemies=lambda: [],
             ),
             items=SimpleNamespace(get_items=lambda: []),
             hud=hud,

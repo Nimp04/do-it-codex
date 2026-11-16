@@ -108,7 +108,7 @@ class Renderer:
 
     def render(
         self, game_state, player, platforms,
-        obstacles=(), enemies=(), items=(), hud=None,
+        obstacles=(), items=(), hud=None,
     ):
         """카메라는 main이 갱신하며, 여기서는 객체 상태를 읽고 출력만 한다.
 
@@ -122,7 +122,6 @@ class Renderer:
             for objects, color in (
                 (platforms, (60, 160, 90)),
                 (obstacles, (100, 110, 125)),
-                (enemies, (220, 70, 70)),
                 (items, (245, 185, 40)),
             ):
                 for obj in objects:
