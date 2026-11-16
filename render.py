@@ -150,7 +150,11 @@ class Renderer:
                 rect = self.draw_object(item, ITEM_STYLES[item.item_type][1])
                 self.draw_item_label(item.item_type, rect)
             if player is not None:
-                self.draw_object(player, (55, 110, 220))
+                color = (
+                    ITEM_STYLES[GHOST][1]
+                    if getattr(player, "is_ghost", False) else (55, 110, 220)
+                )
+                self.draw_object(player, color)
 
         if hud is not None:
             ui = hud.get_ui_data()

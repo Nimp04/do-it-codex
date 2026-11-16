@@ -183,6 +183,26 @@ class RendererTests(unittest.TestCase):
         self.assertEqual(self.renderer.screen.get_at((381, 386))[:3], (45, 145, 185))
         self.assertEqual(moving.position, pygame.Vector2(380, 400))
 
+    def test_ghost_color_follows_flag_and_preserves_player_size(self):
+        player = game_object(100, 400, (20, 20))
+        self.renderer.render("PLAYING", player, [])
+        self.assertEqual(self.renderer.screen.get_at((101, 381))[:3], (55, 110, 220))
+
+        for state in ("PLAYING", "GAME_OVER"):
+            for active, color in (
+                (False, (55, 110, 220)),
+                (True, (190, 150, 240)),
+                (False, (55, 110, 220)),
+            ):
+                with self.subTest(state=state, active=active):
+                    player.is_ghost = active
+                    self.renderer.render(state, player, [])
+                    self.assertEqual(self.renderer.screen.get_at((101, 381))[:3], color)
+                    self.assertNotEqual(self.renderer.screen.get_at((125, 381))[:3], color)
+                    self.assertEqual(player.size, (20, 20))
+                    self.assertEqual(player.position, pygame.Vector2(100, 400))
+                    self.assertEqual(player.is_ghost, active)
+
     def test_draw_text_centers_by_default_and_allows_explicit_position(self):
         renderer = self.renderer
         with patch.object(renderer, "screen", wraps=renderer.screen) as screen:
