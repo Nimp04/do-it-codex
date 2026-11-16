@@ -134,12 +134,18 @@ class Renderer:
         self.background.draw(self.screen, self.camera.position)
 
         if game_state in ("PLAYING", "GAME_OVER"):
-            for objects, color in (
-                (platforms, (60, 160, 90)),
-                (obstacles, (100, 110, 125)),
-            ):
-                for obj in objects:
-                    self.draw_object(obj, color)
+            for platform in platforms:
+                moving = getattr(platform, "type", "normal") == "moving"
+                color = (45, 145, 185) if moving else (60, 160, 90)
+                rect = self.draw_object(platform, color)
+                if moving:
+                    pygame.draw.line(
+                        self.screen, (25, 30, 40),
+                        (rect.left + 4, rect.centery),
+                        (rect.right - 4, rect.centery), 2,
+                    )
+            for obstacle in obstacles:
+                self.draw_object(obstacle, (100, 110, 125))
             for item in items:
                 rect = self.draw_object(item, ITEM_STYLES[item.item_type][1])
                 self.draw_item_label(item.item_type, rect)

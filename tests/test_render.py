@@ -168,6 +168,21 @@ class RendererTests(unittest.TestCase):
                     self.assertEqual(self.renderer.screen.get_at(position)[:3], color)
                 self.assertEqual(hud.item_slots, slots)
 
+    def test_moving_platform_is_distinct_and_uses_updated_position(self):
+        normal = game_object(80, 400, (100, 15))
+        moving = game_object(280, 400, (100, 15))
+        moving.type = "moving"
+        self.renderer.render("PLAYING", None, [normal, moving])
+        self.assertEqual(self.renderer.screen.get_at((81, 386))[:3], (60, 160, 90))
+        self.assertEqual(self.renderer.screen.get_at((281, 386))[:3], (45, 145, 185))
+        self.assertEqual(self.renderer.screen.get_at((300, 392))[:3], (25, 30, 40))
+
+        moving.position.x = 380
+        self.renderer.render("PLAYING", None, [normal, moving])
+        self.assertNotEqual(self.renderer.screen.get_at((281, 386))[:3], (45, 145, 185))
+        self.assertEqual(self.renderer.screen.get_at((381, 386))[:3], (45, 145, 185))
+        self.assertEqual(moving.position, pygame.Vector2(380, 400))
+
     def test_draw_text_centers_by_default_and_allows_explicit_position(self):
         renderer = self.renderer
         with patch.object(renderer, "screen", wraps=renderer.screen) as screen:
