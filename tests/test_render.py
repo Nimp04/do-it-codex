@@ -10,6 +10,7 @@ import pygame
 import main
 import render
 from hud import HUD
+from item import DOUBLE_JUMP, GHOST, SHRINK, Item
 from config import (
     BACKGROUND_SCROLL_RATIO,
     CAMERA_FOLLOW_THRESHOLD,
@@ -121,7 +122,7 @@ class RendererTests(unittest.TestCase):
         renderer = self.renderer
         player = game_object(100, 100, (20, 20))
         platform = game_object(100, 100, (100, 20))
-        item = game_object(100, 100, (10, 10))
+        item = Item((100, 100), DOUBLE_JUMP, size=(10, 10))
         camera_before = renderer.camera.position.copy()
         player_before = player.position.copy()
         renderer.render("PLAYING", player, [platform], items=[item])
@@ -133,6 +134,74 @@ class RendererTests(unittest.TestCase):
         player.position.y = 0
         renderer.render("PLAYING", player, [])
         self.assertEqual(renderer.screen.get_at((101, 799))[:3], (55, 110, 220))
+
+    def test_world_item_types_have_distinct_colors_and_visible_labels(self):
+        items = [
+            Item((80 + index * 100, 400), item_type)
+            for index, item_type in enumerate((DOUBLE_JUMP, GHOST, SHRINK))
+        ]
+        self.renderer.render("PLAYING", None, [], [], items)
+        colors = []
+        for item in items:
+            rect = pygame.Rect(item.position.x, 368, 32, 32)
+            colors.append(self.renderer.screen.get_at((rect.x + 1, rect.y + 1))[:3])
+            self.assertTrue(any(
+                self.renderer.screen.get_at((x, y))[:3] == (25, 30, 40)
+                for x in range(rect.left, rect.right)
+                for y in range(rect.top, rect.bottom)
+            ))
+        self.assertEqual(len(set(colors)), 3)
+
+    def test_item_slots_follow_hud_order_and_stay_fixed_when_camera_moves(self):
+        hud = HUD()
+        for slots, expected_colors in (
+            ([DOUBLE_JUMP, GHOST], ((245, 185, 40), (190, 150, 240))),
+            ([GHOST, DOUBLE_JUMP], ((190, 150, 240), (245, 185, 40))),
+            ([None, SHRINK], ((245, 250, 255), (80, 200, 190))),
+            ([None, None], ((245, 250, 255), (245, 250, 255))),
+        ):
+            with self.subTest(slots=slots):
+                hud.item_slots = list(slots)
+                self.renderer.camera.position.y += 1000
+                self.renderer.render("PLAYING", None, [], hud=hud)
+                for position, color in zip(((455, 19), (531, 19)), expected_colors):
+                    self.assertEqual(self.renderer.screen.get_at(position)[:3], color)
+                self.assertEqual(hud.item_slots, slots)
+
+    def test_moving_platform_is_distinct_and_uses_updated_position(self):
+        normal = game_object(80, 400, (100, 15))
+        moving = game_object(280, 400, (100, 15))
+        moving.type = "moving"
+        self.renderer.render("PLAYING", None, [normal, moving])
+        self.assertEqual(self.renderer.screen.get_at((81, 386))[:3], (60, 160, 90))
+        self.assertEqual(self.renderer.screen.get_at((281, 386))[:3], (45, 145, 185))
+        self.assertEqual(self.renderer.screen.get_at((300, 392))[:3], (25, 30, 40))
+
+        moving.position.x = 380
+        self.renderer.render("PLAYING", None, [normal, moving])
+        self.assertNotEqual(self.renderer.screen.get_at((281, 386))[:3], (45, 145, 185))
+        self.assertEqual(self.renderer.screen.get_at((381, 386))[:3], (45, 145, 185))
+        self.assertEqual(moving.position, pygame.Vector2(380, 400))
+
+    def test_ghost_color_follows_flag_and_preserves_player_size(self):
+        player = game_object(100, 400, (20, 20))
+        self.renderer.render("PLAYING", player, [])
+        self.assertEqual(self.renderer.screen.get_at((101, 381))[:3], (55, 110, 220))
+
+        for state in ("PLAYING", "GAME_OVER"):
+            for active, color in (
+                (False, (55, 110, 220)),
+                (True, (190, 150, 240)),
+                (False, (55, 110, 220)),
+            ):
+                with self.subTest(state=state, active=active):
+                    player.is_ghost = active
+                    self.renderer.render(state, player, [])
+                    self.assertEqual(self.renderer.screen.get_at((101, 381))[:3], color)
+                    self.assertNotEqual(self.renderer.screen.get_at((125, 381))[:3], color)
+                    self.assertEqual(player.size, (20, 20))
+                    self.assertEqual(player.position, pygame.Vector2(100, 400))
+                    self.assertEqual(player.is_ghost, active)
 
     def test_draw_text_centers_by_default_and_allows_explicit_position(self):
         renderer = self.renderer
@@ -172,7 +241,6 @@ class RendererTests(unittest.TestCase):
             level=SimpleNamespace(
                 get_platforms=lambda: [],
                 get_obstacles=lambda: [],
-                get_enemies=lambda: [],
             ),
             items=SimpleNamespace(get_items=lambda: []),
             hud=hud,
