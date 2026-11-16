@@ -10,6 +10,7 @@ import pygame
 import main
 import render
 from hud import HUD
+from item import DOUBLE_JUMP, GHOST, SHRINK, Item
 from config import (
     BACKGROUND_SCROLL_RATIO,
     CAMERA_FOLLOW_THRESHOLD,
@@ -121,7 +122,7 @@ class RendererTests(unittest.TestCase):
         renderer = self.renderer
         player = game_object(100, 100, (20, 20))
         platform = game_object(100, 100, (100, 20))
-        item = game_object(100, 100, (10, 10))
+        item = Item((100, 100), DOUBLE_JUMP, size=(10, 10))
         camera_before = renderer.camera.position.copy()
         player_before = player.position.copy()
         renderer.render("PLAYING", player, [platform], items=[item])
@@ -133,6 +134,23 @@ class RendererTests(unittest.TestCase):
         player.position.y = 0
         renderer.render("PLAYING", player, [])
         self.assertEqual(renderer.screen.get_at((101, 799))[:3], (55, 110, 220))
+
+    def test_world_item_types_have_distinct_colors_and_visible_labels(self):
+        items = [
+            Item((80 + index * 100, 400), item_type)
+            for index, item_type in enumerate((DOUBLE_JUMP, GHOST, SHRINK))
+        ]
+        self.renderer.render("PLAYING", None, [], [], items)
+        colors = []
+        for item in items:
+            rect = pygame.Rect(item.position.x, 368, 32, 32)
+            colors.append(self.renderer.screen.get_at((rect.x + 1, rect.y + 1))[:3])
+            self.assertTrue(any(
+                self.renderer.screen.get_at((x, y))[:3] == (25, 30, 40)
+                for x in range(rect.left, rect.right)
+                for y in range(rect.top, rect.bottom)
+            ))
+        self.assertEqual(len(set(colors)), 3)
 
     def test_draw_text_centers_by_default_and_allows_explicit_position(self):
         renderer = self.renderer

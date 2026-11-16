@@ -10,6 +10,14 @@ from config import (
     WORLD_ORIGIN,
     WORLD_WIDTH,
 )
+from item import DOUBLE_JUMP, GHOST, SHRINK
+
+
+ITEM_STYLES = {
+    DOUBLE_JUMP: ("점", (245, 185, 40)),
+    GHOST: ("고", (190, 150, 240)),
+    SHRINK: ("소", (80, 200, 190)),
+}
 
 
 class Camera:
@@ -62,6 +70,7 @@ class Renderer:
         self.scale = self.screen.get_width() / WORLD_WIDTH
         # shortcut: 시스템 한글 글꼴을 사용한다. 배포 시 글꼴 자산을 포함한다.
         self.font = pygame.font.SysFont("malgungothic", 28)
+        self.item_font = pygame.font.SysFont("malgungothic", 20)
         self.camera = Camera()
         self.background = Background()
 
@@ -95,6 +104,11 @@ class Renderer:
             height * self.scale,
         )
         pygame.draw.rect(self.screen, color, rect)
+        return rect
+
+    def draw_item_label(self, item_type, rect):
+        label = self.item_font.render(ITEM_STYLES[item_type][0], True, (25, 30, 40))
+        self.screen.blit(label, label.get_rect(center=rect.center))
 
     def draw_text(self, text: str, screen_position, *, centered=True):
         """기본은 화면 가로 중앙 정렬이며, centered=False면 전달 위치를 사용한다."""
@@ -122,10 +136,12 @@ class Renderer:
             for objects, color in (
                 (platforms, (60, 160, 90)),
                 (obstacles, (100, 110, 125)),
-                (items, (245, 185, 40)),
             ):
                 for obj in objects:
                     self.draw_object(obj, color)
+            for item in items:
+                rect = self.draw_object(item, ITEM_STYLES[item.item_type][1])
+                self.draw_item_label(item.item_type, rect)
             if player is not None:
                 self.draw_object(player, (55, 110, 220))
 
