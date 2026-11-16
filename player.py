@@ -5,7 +5,7 @@ from enum import StrEnum
 from math import isfinite
 import pygame
 
-from config import WORLD_ORIGIN, WORLD_WIDTH
+from config import WORLD_ORIGIN, WORLD_WIDTH,PLAYER_SIZE
 
 class PlayerState(StrEnum):
     JUMPING = "JUMPING"
@@ -16,7 +16,7 @@ class Player:
     def __init__(self):
         self.position = pygame.Vector2(0, 0)
         self.velocity = pygame.Vector2(0, 0)
-        self.size = (40, 40)
+        self.size = PLAYER_SIZE
         self.state = PlayerState.FALLING
 
         self.move_speed = 400
@@ -24,6 +24,7 @@ class Player:
         self.gravity = 1500
         self.previous_bottom = 0
         self._pending_motion = None
+        self.is_ghost = False
 
     def reset(self, spawn_position):
         self.position = pygame.Vector2(spawn_position)
@@ -31,6 +32,7 @@ class Player:
         self.previous_bottom = self.position.y
         self.state = PlayerState.JUMPING
         self._pending_motion = None
+        self.is_ghost = False
 
     def update(self, dt, input_state):
         if not isfinite(dt) or dt < 0:
@@ -90,9 +92,10 @@ class Player:
 
     def _check_collisions(self, platforms, obstacles, items):
         """좌측 하단 기준으로 판정하며, 다른 모듈의 변경은 이벤트로 요청한다."""
-        for obstacle in obstacles:
-            if self._overlaps(obstacle):
-                return [{"type": "GAME_OVER"}]
+        if not self.is_ghost:
+            for obstacle in obstacles:
+                if self._overlaps(obstacle):
+                    return [{"type": "GAME_OVER"}]
 
         events = [
             {"type": "ITEM_COLLECTED", "item_id": item.id}
