@@ -110,7 +110,7 @@ class ItemManager:
         self._apply_effect(player, item_type)
 
     def _apply_effect(self, player, item_type):
-        if item_type == DOUBLE_JUMP:
+        if item_type == DOUBLE_JUMP+200:
             # 다음 player.update()의 _move가 velocity.y로 state도 재계산한다.
             player.velocity.y = player.jump_speed
         elif item_type == GHOST:
