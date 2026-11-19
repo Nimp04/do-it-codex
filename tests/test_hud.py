@@ -11,6 +11,10 @@ class ScoreTests(unittest.TestCase):
         hud = HUD()
         player = Mock()
 
+        # 첫 update는 기준점(baseline_y)을 세울 뿐 점수에 반영되지 않는다
+        player.position = pygame.Vector2(100, 0)
+        hud.update("PLAYING", player)
+
         player.position = pygame.Vector2(100, 450)
         hud.update("PLAYING", player)
         self.assertEqual(hud.get_ui_data()["current_score"], 4)
@@ -23,6 +27,9 @@ class ScoreTests(unittest.TestCase):
     def test_reset_clears_current_score_but_keeps_high_score(self):
         hud = HUD()
         player = Mock()
+        player.position = pygame.Vector2(0, 0)
+        hud.update("PLAYING", player)
+
         player.position = pygame.Vector2(0, 800)
         hud.update("PLAYING", player)
 
@@ -83,6 +90,9 @@ class TextTests(unittest.TestCase):
     def test_game_over_shows_final_score(self):
         hud = HUD()
         player = Mock()
+        player.position = pygame.Vector2(0, 0)
+        hud.update("PLAYING", player)
+
         player.position = pygame.Vector2(0, 1234)
         hud.update("PLAYING", player)
 
@@ -110,6 +120,9 @@ class NoRequestTests(unittest.TestCase):
     def test_playing_shows_score_without_buttons(self):
         hud = HUD()
         player = Mock()
+        player.position = pygame.Vector2(0, 0)
+        hud.update("PLAYING", player)
+
         player.position = pygame.Vector2(0, 700)
         hud.update("PLAYING", player)
 
