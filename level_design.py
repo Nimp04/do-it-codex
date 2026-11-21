@@ -44,11 +44,15 @@ MOVING_PLATFORM_CHANCE = 0.7
 
 # 움직이는 발판의 속도 (초당 월드 단위)
 # 속도 = 기본 속도 + 시작 발판에서 올라간 높이 × 증가량, 최고 속도를 넘지 않는다.
-# 증가량 0.01은 한 행(ROW_GAP=100, 점수 1점)마다 1씩 빨라져
-# 빠른 발판은 약 100점, 느린 발판은 약 180점에서 최고 속도에 닿는다.
+# 느린 발판이 MOVING_MAX_SPEED_SCORE점(한 행 = 점수 1점)에서 최고 속도에 닿도록 증가량을 계산한다.
+# 현재 값: 한 행마다 0.8씩 빨라져 빠른 발판은 175점, 느린 발판은 300점에서 300이 된다.
+# 스프링·점프 아이템으로 180점까지는 쉽게 오르므로 그 이후에도 난이도가 계속 오르게 한다.
 MOVING_BASE_SPEED = 60
-MOVING_SPEED_PER_HEIGHT = 0.01
-MOVING_MAX_SPEED = 240
+MOVING_MAX_SPEED = 300
+MOVING_MAX_SPEED_SCORE = 300
+MOVING_SPEED_PER_HEIGHT = (
+    (MOVING_MAX_SPEED - MOVING_BASE_SPEED) / (MOVING_MAX_SPEED_SCORE * ROW_GAP)
+)
 
 # 움직이는 발판의 절반은 빠른 발판으로, 같은 높이의 느린 발판보다 이 배율만큼 빠르다.
 # 둘 다 최고 속도에 막히므로 높이 올라갈수록 결국 모두 최고 속도가 된다.

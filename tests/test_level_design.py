@@ -27,7 +27,8 @@ class LevelDesignTests(unittest.TestCase):
     def test_moving_speed_grows_with_height_and_is_capped(self):
         level = Level()
         # 삭제 없이 행을 직접 생성해 낮은 행부터 상한 이후까지 모두 확인한다.
-        for _ in range(200):
+        rows = level_design.MOVING_MAX_SPEED_SCORE + 100
+        for _ in range(rows):
             level._generate_next_row()
         moving = [p for p in level.get_platforms() if p.type == "moving"]
 
