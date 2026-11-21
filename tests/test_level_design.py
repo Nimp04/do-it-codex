@@ -80,21 +80,27 @@ class LevelDesignTests(unittest.TestCase):
             self.assertTrue(0 <= p.position.x <= right)
 
     def test_obstacles_off_platforms_and_static_paths(self):
-        obstacles = self.level.get_obstacles()
+        level = Level()
+        for _ in range(1000):
+            level._generate_next_row()
+        obstacles = level.get_obstacles()
         self.assertTrue(obstacles)
+        # 고정 발판에서 제자리로 튀어 오른 플레이어 머리가 닿는 최고 높이
+        reach = level_design.PLAYER_JUMP_HEIGHT + level_design.PLAYER_SIZE[1]
         for o in obstacles:
             self.assertLess(o.size[0], level_design.PLATFORM_WIDTH)
-            nearby = [
-                p for p in self.level.get_platforms()
-                if abs(p.position.y - o.position.y) <= level_design.ROW_GAP / 2
-            ]
-            for p in nearby:
+            for p in level.get_platforms():
+                top = p.position.y + p.size[1]
                 # 장애물은 위아래 어떤 발판과도 세로로 겹치지 않는다.
-                self.assertTrue(
-                    o.position.y >= p.position.y + p.size[1]
-                    or o.position.y + o.size[1] <= p.position.y
-                )
-                if p.type == "moving":
+                if abs(p.position.y - o.position.y) <= level_design.ROW_GAP / 2:
+                    self.assertTrue(
+                        o.position.y >= top
+                        or o.position.y + o.size[1] <= p.position.y
+                    )
+                # 바로 위 행(내려오며 지나는 경로)과 점프가 닿는 아래 행들만 검사한다.
+                above = 0 < p.position.y - o.position.y <= level_design.ROW_GAP / 2
+                below = top <= o.position.y < top + reach
+                if p.type == "moving" or not (above or below):
                     continue
                 # 고정 발판의 수직 통로는 비워 둔다.
                 self.assertTrue(

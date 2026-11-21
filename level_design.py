@@ -4,6 +4,7 @@
 Platform.position은 발판의 좌측 하단 좌표이다.
 """
 
+from collections import deque
 from dataclasses import dataclass
 import random
 
@@ -62,6 +63,16 @@ OBSTACLE_SIZE = (60, 30)
 # 처음 몇 행은 장애물 없이 시작한다.
 SAFE_ROWS = 3
 
+# shortcut: player.py의 jump_speed(800)와 gravity(1500)로 계산한 점프 높이(약 213). 그 값이 바뀌면 같이 고친다.
+PLAYER_JUMP_HEIGHT = 800 ** 2 / (2 * 1500)
+
+# 고정 발판에서 튀어 오른 플레이어 머리가 닿는 장애물 아래 행 수 (현재 3행).
+# 이 행들의 고정 발판 위 수직 경로에는 장애물을 두지 않아 제자리 점프로는 절대 부딪히지 않는다.
+OBSTACLE_CLEAR_ROWS = int(
+    (PLATFORM_HEIGHT + PLAYER_JUMP_HEIGHT + PLAYER_SIZE[1] - ROW_GAP / 2)
+    // ROW_GAP
+) + 1
+
 # 행마다 고정 발판 위에 아이템이 생길 확률과 종류
 ITEM_CHANCE = 0.08
 ITEM_TYPES = (DOUBLE_JUMP, GHOST, SHRINK)
@@ -112,7 +123,10 @@ class Level:
         )
 
         self.platforms.append(start_platform)
-        self.last_row_x = [int(start_x)]
+        # 최근 OBSTACLE_CLEAR_ROWS개 행의 고정 발판 x 좌표
+        self.recent_static_x = deque(
+            [[int(start_x)]], maxlen=OBSTACLE_CLEAR_ROWS
+        )
 
         # 시작 발판 위쪽으로 초기 발판을 미리 생성한다.
         for _ in range(INITIAL_ROWS):
@@ -190,7 +204,7 @@ class Level:
 
             self.platforms.append(platform)
 
-        # 고정 발판의 수직 경로만 비워 둔다.
+        # 점프가 닿는 아래 행들과 바로 위 행의 고정 발판 수직 경로를 비워 둔다.
         # 움직이는 발판은 제자리 점프로 기다리면 장애물 없는 위치로 온다.
         if (
             self.next_row_index > SAFE_ROWS
@@ -198,7 +212,7 @@ class Level:
         ):
             self._generate_obstacle(
                 y - ROW_GAP / 2,
-                self.last_row_x + static_x,
+                [x for row in self.recent_static_x for x in row] + static_x,
             )
 
         if (
@@ -208,7 +222,7 @@ class Level:
         ):
             self._generate_item(self.rng.choice(static_x), y)
 
-        self.last_row_x = static_x
+        self.recent_static_x.append(static_x)
         self.next_row_index += 1
 
     def _moving_speed(self, y: float) -> float:
