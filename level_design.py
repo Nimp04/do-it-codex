@@ -43,13 +43,16 @@ MOVING_PLATFORM_CHANCE = 0.7
 
 # 움직이는 발판의 속도 (초당 월드 단위)
 # 속도 = 기본 속도 + 시작 발판에서 올라간 높이 × 증가량, 최고 속도를 넘지 않는다.
-# 증가량 0.02는 한 행(ROW_GAP=100)마다 2씩 빨라져 약 90행에서 최고 속도에 닿는다.
+# 증가량 0.01은 한 행(ROW_GAP=100, 점수 1점)마다 1씩 빨라져
+# 빠른 발판은 약 100점, 느린 발판은 약 180점에서 최고 속도에 닿는다.
 MOVING_BASE_SPEED = 60
-MOVING_SPEED_PER_HEIGHT = 0.02
+MOVING_SPEED_PER_HEIGHT = 0.01
 MOVING_MAX_SPEED = 240
 
-# 같은 높이의 발판끼리도 속도가 조금씩 다르도록 주는 무작위 편차 (±20%)
-MOVING_SPEED_JITTER = 0.2
+# 움직이는 발판의 절반은 빠른 발판으로, 같은 높이의 느린 발판보다 이 배율만큼 빠르다.
+# 둘 다 최고 속도에 막히므로 높이 올라갈수록 결국 모두 최고 속도가 된다.
+FAST_PLATFORM_CHANCE = 0.5
+FAST_SPEED_MULTIPLIER = 1.5
 
 # 행 사이에 장애물이 생길 확률과 크기
 # 높이는 행 간격(ROW_GAP)의 절반에서 발판 두께를 뺀 값보다 작아야 발판과 겹치지 않는다.
@@ -209,15 +212,14 @@ class Level:
         self.next_row_index += 1
 
     def _moving_speed(self, y: float) -> float:
-        """생성 높이가 높을수록 빠른 속도를 편차를 섞어 반환한다."""
+        """생성 높이가 높을수록 빠른 속도를 느린/빠른 두 종류로 반환한다."""
 
         speed = MOVING_BASE_SPEED + (y - START_Y) * MOVING_SPEED_PER_HEIGHT
-        jitter = self.rng.uniform(
-            1 - MOVING_SPEED_JITTER, 1 + MOVING_SPEED_JITTER
-        )
 
-        # 편차를 적용한 뒤에 상한을 걸어 최고 속도를 절대 넘지 않게 한다.
-        return min(speed * jitter, MOVING_MAX_SPEED)
+        if self.rng.random() < FAST_PLATFORM_CHANCE:
+            speed *= FAST_SPEED_MULTIPLIER
+
+        return min(speed, MOVING_MAX_SPEED)
 
     def _generate_obstacle(self, y: float, platform_xs: list[int]):
         """두 행 사이에 고정 발판의 수직 경로를 막지 않는 위치로 장애물을 만든다."""

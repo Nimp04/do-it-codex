@@ -31,18 +31,24 @@ class LevelDesignTests(unittest.TestCase):
             level._generate_next_row()
         moving = [p for p in level.get_platforms() if p.type == "moving"]
 
-        jitter = level_design.MOVING_SPEED_JITTER
         max_speed = level_design.MOVING_MAX_SPEED
+        fast_count = 0
         for p in moving:
             base = (
                 level_design.MOVING_BASE_SPEED
                 + (p.position.y - level_design.START_Y)
                 * level_design.MOVING_SPEED_PER_HEIGHT
             )
+            slow = min(base, max_speed)
+            fast = min(base * level_design.FAST_SPEED_MULTIPLIER, max_speed)
             speed = abs(p.velocity_x)
-            self.assertLessEqual(speed, max_speed)
-            self.assertGreaterEqual(speed, min(base * (1 - jitter), max_speed))
-            self.assertLessEqual(speed, base * (1 + jitter))
+            # 느린 발판 또는 빠른 발판 두 가지 속도만 나온다.
+            self.assertTrue(
+                speed == slow or speed == fast,
+                f"y={p.position.y} speed={speed}",
+            )
+            if slow < fast and speed == fast:
+                fast_count += 1
 
         def average_speed(rows):
             ys = {level_design.START_Y + r * level_design.ROW_GAP for r in rows}
@@ -53,9 +59,18 @@ class LevelDesignTests(unittest.TestCase):
         self.assertLess(average_speed(range(1, 21)), average_speed(range(41, 61)))
         self.assertTrue(any(abs(p.velocity_x) == max_speed for p in moving))
 
-        # 같은 높이 대에서도 편차로 속도가 서로 다르다.
-        low = [abs(p.velocity_x) for p in moving if p.position.y < 2750]
-        self.assertGreater(len(set(low)), 1)
+        # 상한 전 구간에서는 빠른 발판이 실제로 섞여 나온다.
+        self.assertGreater(fast_count, 0)
+
+        # 충분히 높은 곳(느린 발판도 상한 도달)에서는 모두 최고 속도다.
+        cap_y = level_design.START_Y + (
+            (max_speed - level_design.MOVING_BASE_SPEED)
+            / level_design.MOVING_SPEED_PER_HEIGHT
+        )
+        self.assertTrue(all(
+            abs(p.velocity_x) == max_speed
+            for p in moving if p.position.y >= cap_y
+        ))
 
     def test_moving_platform_stays_in_world(self):
         for _ in range(600):
