@@ -11,25 +11,51 @@ class LevelDesignTests(unittest.TestCase):
         # 충분히 많은 행을 생성해 확률적 요소가 모두 나오게 한다.
         self.level.update(0, 20000)
 
-    def test_moving_platform_ratio_and_speed_tiers(self):
-        platforms = self.level.get_platforms()
+    def test_moving_platform_ratio(self):
+        level = Level()
+        # 시드가 고정되지 않으므로 표본을 크게 잡아 비율이 흔들리지 않게 한다.
+        for _ in range(1000):
+            level._generate_next_row()
+        platforms = level.get_platforms()
         moving = [p for p in platforms if p.type == "moving"]
         self.assertAlmostEqual(
             len(moving) / len(platforms),
             level_design.MOVING_PLATFORM_CHANCE,
             delta=0.1,
         )
+
+    def test_moving_speed_grows_with_height_and_is_capped(self):
+        level = Level()
+        # 삭제 없이 행을 직접 생성해 낮은 행부터 상한 이후까지 모두 확인한다.
+        for _ in range(200):
+            level._generate_next_row()
+        moving = [p for p in level.get_platforms() if p.type == "moving"]
+
         jitter = level_design.MOVING_SPEED_JITTER
-        used_tiers = set()
+        max_speed = level_design.MOVING_MAX_SPEED
         for p in moving:
-            speed = abs(p.velocity_x)
-            tier = next(
-                t for t in level_design.MOVING_SPEED_TIERS
-                if t * (1 - jitter) <= speed <= t * (1 + jitter)
+            base = (
+                level_design.MOVING_BASE_SPEED
+                + (p.position.y - level_design.START_Y)
+                * level_design.MOVING_SPEED_PER_HEIGHT
             )
-            used_tiers.add(tier)
-        # 느림/보통/빠름이 모두 나와야 속도 차이가 체감된다.
-        self.assertEqual(used_tiers, set(level_design.MOVING_SPEED_TIERS))
+            speed = abs(p.velocity_x)
+            self.assertLessEqual(speed, max_speed)
+            self.assertGreaterEqual(speed, min(base * (1 - jitter), max_speed))
+            self.assertLessEqual(speed, base * (1 + jitter))
+
+        def average_speed(rows):
+            ys = {level_design.START_Y + r * level_design.ROW_GAP for r in rows}
+            speeds = [abs(p.velocity_x) for p in moving if p.position.y in ys]
+            return sum(speeds) / len(speeds)
+
+        # 위쪽 행일수록 평균 속도가 빨라지고, 상한 이후에는 최고 속도에 붙는다.
+        self.assertLess(average_speed(range(1, 21)), average_speed(range(41, 61)))
+        self.assertTrue(any(abs(p.velocity_x) == max_speed for p in moving))
+
+        # 같은 높이 대에서도 편차로 속도가 서로 다르다.
+        low = [abs(p.velocity_x) for p in moving if p.position.y < 2750]
+        self.assertGreater(len(set(low)), 1)
 
     def test_moving_platform_stays_in_world(self):
         for _ in range(600):

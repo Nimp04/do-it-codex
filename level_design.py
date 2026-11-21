@@ -41,10 +41,15 @@ PLATFORM_RULES = [
 # 발판 하나가 움직이는 발판일 확률
 MOVING_PLATFORM_CHANCE = 0.7
 
-# 움직이는 발판의 속도 단계 (느림/보통/빠름, 초당 월드 단위)
-# 단계 사이 차이를 크게 두어 발판마다 속도 차이가 체감되게 한다.
-MOVING_SPEED_TIERS = (40, 120, 240)
-MOVING_SPEED_JITTER = 0.15
+# 움직이는 발판의 속도 (초당 월드 단위)
+# 속도 = 기본 속도 + 시작 발판에서 올라간 높이 × 증가량, 최고 속도를 넘지 않는다.
+# 증가량 0.02는 한 행(ROW_GAP=100)마다 2씩 빨라져 약 90행에서 최고 속도에 닿는다.
+MOVING_BASE_SPEED = 60
+MOVING_SPEED_PER_HEIGHT = 0.02
+MOVING_MAX_SPEED = 240
+
+# 같은 높이의 발판끼리도 속도가 조금씩 다르도록 주는 무작위 편차 (±20%)
+MOVING_SPEED_JITTER = 0.2
 
 # 행 사이에 장애물이 생길 확률과 크기
 # 높이는 행 간격(ROW_GAP)의 절반에서 발판 두께를 뺀 값보다 작아야 발판과 겹치지 않는다.
@@ -174,10 +179,7 @@ class Level:
             )
 
             if self.rng.random() < MOVING_PLATFORM_CHANCE:
-                tier = self.rng.choice(MOVING_SPEED_TIERS)
-                speed = tier * self.rng.uniform(
-                    1 - MOVING_SPEED_JITTER, 1 + MOVING_SPEED_JITTER
-                )
+                speed = self._moving_speed(y)
                 platform.type = "moving"
                 platform.velocity_x = self.rng.choice((-speed, speed))
             else:
@@ -205,6 +207,17 @@ class Level:
 
         self.last_row_x = static_x
         self.next_row_index += 1
+
+    def _moving_speed(self, y: float) -> float:
+        """생성 높이가 높을수록 빠른 속도를 편차를 섞어 반환한다."""
+
+        speed = MOVING_BASE_SPEED + (y - START_Y) * MOVING_SPEED_PER_HEIGHT
+        jitter = self.rng.uniform(
+            1 - MOVING_SPEED_JITTER, 1 + MOVING_SPEED_JITTER
+        )
+
+        # 편차를 적용한 뒤에 상한을 걸어 최고 속도를 절대 넘지 않게 한다.
+        return min(speed * jitter, MOVING_MAX_SPEED)
 
     def _generate_obstacle(self, y: float, platform_xs: list[int]):
         """두 행 사이에 고정 발판의 수직 경로를 막지 않는 위치로 장애물을 만든다."""
