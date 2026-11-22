@@ -10,7 +10,8 @@ import pygame
 import main
 import render
 from hud import HUD
-from item import DOUBLE_JUMP, GHOST, SHRINK, Item
+from item import DOUBLE_JUMP, GHOST, SHRINK, Item, ItemManager
+from player import Player
 from config import (
     BACKGROUND_SCROLL_RATIO,
     CAMERA_FOLLOW_THRESHOLD,
@@ -203,6 +204,72 @@ class RendererTests(unittest.TestCase):
                     self.assertEqual(player.position, pygame.Vector2(100, 400))
                     self.assertEqual(player.is_ghost, active)
 
+    def test_blink_uses_shortest_active_effect_and_speeds_up_at_one_second(self):
+        player = game_object(100, 400, (20, 20))
+        for effects, color in (
+            ((3.1, 0.0), (190, 150, 240)),
+            ((3.0, 0.0), (65, 105, 15)),
+            ((2.25, 0.0), (190, 150, 240)),
+            ((2.25, 1.0), (65, 105, 15)),
+            ((0.0, 0.75), (55, 110, 220)),
+            ((0.0, 0.6), (200, 145, 35)),
+            ((0.0, 0.0), (55, 110, 220)),
+        ):
+            with self.subTest(effects=effects):
+                player.is_ghost = effects[0] > 0
+                self.renderer.render("PLAYING", player, [], effect_times=effects)
+                self.assertEqual(self.renderer.screen.get_at((110, 390))[:3], color)
+
+    def test_player_stretches_in_the_air_and_returns_to_square_at_apex(self):
+        player = Player()
+        player.position.update(100, 400)
+        color = (55, 110, 220)
+        for speed in (0, player.jump_speed, -player.jump_speed):
+            with self.subTest(speed=speed):
+                player.velocity.y = speed
+                self.renderer.render("PLAYING", player, [])
+                screen = self.renderer.screen
+                self.assertEqual(screen.get_at((101, 380))[:3] == color, speed == 0)
+                self.assertEqual(screen.get_at((120, 357))[:3] == color, speed != 0)
+                self.assertEqual(screen.get_at((120, 399))[:3], color)
+                self.assertNotEqual(screen.get_at((120, 400))[:3], color)
+                self.assertEqual(player.size, (40, 40))
+                self.assertEqual(player.position, pygame.Vector2(100, 400))
+
+    def test_platform_contact_draws_squash_before_rebound_stretch(self):
+        player = Player()
+        player.position.update(100, 403)
+        player.velocity.y = -400
+        platform = game_object(80, 385, (100, 15))
+        keys = dict.fromkeys((pygame.K_LEFT, pygame.K_a, pygame.K_RIGHT, pygame.K_d), False)
+        bounds = []
+        with patch.object(pygame.draw, "rect") as draw:
+            for dt in (1 / 60, 1 / 24, 1 / 16, 1 / 8):
+                player.update(dt, keys)
+                player.check_collisions([platform], [], [])
+                self.renderer.draw_player(player, ())
+                bounds.append(draw.call_args.args[2])
+
+        contact, squash, rebound, rising = bounds
+        self.assertEqual(contact.bottom, 400)
+        self.assertEqual(squash.size, contact.size)
+        self.assertLess(squash.bottom, contact.bottom)
+        self.assertLess(squash.height, rebound.height)
+        self.assertLess(rebound.height, rising.height)
+        self.assertGreater(contact.width, player.size[0])
+        self.assertLess(rising.width, player.size[0])
+
+    def test_spiked_obstacle_draws_inside_its_original_bounds(self):
+        obstacle = game_object(100, 400, (60, 30))
+        self.renderer.render("PLAYING", None, [], obstacles=[obstacle])
+        screen = self.renderer.screen
+        self.assertEqual(screen.get_at((130, 385))[:3], (65, 75, 90))
+        self.assertEqual(screen.get_at((100, 377))[:3], (100, 110, 125))
+        self.assertEqual(screen.get_at((159, 392))[:3], (100, 110, 125))
+        self.assertNotEqual(screen.get_at((100, 370))[:3], (100, 110, 125))
+        self.assertEqual(obstacle.size, (60, 30))
+        self.assertEqual(obstacle.position, pygame.Vector2(100, 400))
+
     def test_draw_text_centers_by_default_and_allows_explicit_position(self):
         renderer = self.renderer
         with patch.object(renderer, "screen", wraps=renderer.screen) as screen:
@@ -242,7 +309,7 @@ class RendererTests(unittest.TestCase):
                 get_platforms=lambda: [],
                 get_obstacles=lambda: [],
             ),
-            items=SimpleNamespace(get_items=lambda: []),
+            items=ItemManager(),
             hud=hud,
             renderer=renderer,
         )

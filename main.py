@@ -132,6 +132,7 @@ def render_frame(game: Game):
         obstacles=game.level.get_obstacles(),
         items=game.items.get_items(),
         hud=game.hud,
+        effect_times=game.items.get_effect_times(),
     )
 
 

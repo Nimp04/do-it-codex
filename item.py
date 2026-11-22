@@ -63,6 +63,10 @@ class ItemManager:
     def get_items(self):
         return self.items
 
+    def get_effect_times(self) -> tuple[float, float]:
+        """고스트와 소형화 효과의 남은 시간을 초 단위로 반환한다."""
+        return self._ghost_remaining, self._shrink_remaining
+
     def collect(self, item_id, player, level):
         self._player = player
         item = next((i for i in self.items if i.id == item_id), None)
@@ -110,9 +114,9 @@ class ItemManager:
         self._apply_effect(player, item_type)
 
     def _apply_effect(self, player, item_type):
-        if item_type == DOUBLE_JUMP+200:
+        if item_type == DOUBLE_JUMP:
             # 다음 player.update()의 _move가 velocity.y로 state도 재계산한다.
-            player.velocity.y = player.jump_speed
+            player.velocity.y = player.jump_speed + 200
         elif item_type == GHOST:
             player.is_ghost = True
             self._ghost_remaining = GHOST_DURATION
