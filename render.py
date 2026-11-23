@@ -107,7 +107,9 @@ class Renderer:
         return rect
 
     def draw_item_label(self, item_type, rect):
-        label = self.item_font.render(ITEM_STYLES[item_type][0], True, (25, 30, 40))
+        label = self.item_font.render(
+            ITEM_STYLES[item_type][0], True, (25, 30, 40)
+        )
         self.screen.blit(label, label.get_rect(center=rect.center))
 
     def draw_text(self, text: str, screen_position, *, centered=True):
@@ -135,56 +137,99 @@ class Renderer:
 
         if game_state in ("PLAYING", "GAME_OVER"):
             for platform in platforms:
-                moving = getattr(platform, "type", "normal") == "moving"
-                color = (45, 145, 185) if moving else (60, 160, 90)
+                platform_type = getattr(platform, "type", "normal")
+
+                if platform_type == "spring":
+                    color = (245, 185, 40)  # 스프링 발판
+                elif platform_type == "moving":
+                    color = (45, 145, 185)  # 움직이는 발판
+                else:
+                    color = (60, 160, 90)  # 일반 발판
+
                 rect = self.draw_object(platform, color)
-                if moving:
+
+                # 기존 움직이는 발판에만 가로선 표시
+                if platform_type == "moving":
                     pygame.draw.line(
                         self.screen, (25, 30, 40),
                         (rect.left + 4, rect.centery),
                         (rect.right - 4, rect.centery), 2,
                     )
+
             for obstacle in obstacles:
                 self.draw_object(obstacle, (100, 110, 125))
+
             for item in items:
-                rect = self.draw_object(item, ITEM_STYLES[item.item_type][1])
+                rect = self.draw_object(
+                    item, ITEM_STYLES[item.item_type][1]
+                )
                 self.draw_item_label(item.item_type, rect)
+
             if player is not None:
                 color = (
                     ITEM_STYLES[GHOST][1]
-                    if getattr(player, "is_ghost", False) else (55, 110, 220)
+                    if getattr(player, "is_ghost", False)
+                    else (55, 110, 220)
                 )
                 self.draw_object(player, color)
 
         if hud is not None:
             ui = hud.get_ui_data()
+
             if game_state in ("PLAYING", "GAME_OVER"):
-                self.draw_text(f"Score: {ui['current_score']}", (12, 12), centered=False)
-                self.draw_text(f"Best: {ui['high_score']}", (12, 44), centered=False)
-                for index, item_type in enumerate(ui.get("item_slots", (None, None))):
+                self.draw_text(
+                    f"Score: {ui['current_score']}",
+                    (12, 12),
+                    centered=False,
+                )
+                self.draw_text(
+                    f"Best: {ui['high_score']}",
+                    (12, 44),
+                    centered=False,
+                )
+
+                for index, item_type in enumerate(
+                    ui.get("item_slots", (None, None))
+                ):
                     rect = pygame.Rect(
-                        self.screen.get_width() - 152 + index * 76, 12, 64, 64
+                        self.screen.get_width() - 152 + index * 76,
+                        12, 64, 64,
                     )
-                    pygame.draw.rect(self.screen, (245, 250, 255), rect)
+                    pygame.draw.rect(
+                        self.screen, (245, 250, 255), rect
+                    )
+
                     if item_type is not None:
                         pygame.draw.rect(
-                            self.screen, ITEM_STYLES[item_type][1], rect.inflate(-12, -12)
+                            self.screen,
+                            ITEM_STYLES[item_type][1],
+                            rect.inflate(-12, -12),
                         )
                         self.draw_item_label(item_type, rect)
+
                     pygame.draw.rect(
-                        self.screen, (25, 30, 40), rect, width=3 if index == 0 else 1
+                        self.screen,
+                        (25, 30, 40),
+                        rect,
+                        width=3 if index == 0 else 1,
                     )
+
             for text in ui.get("texts", ()):
                 self.draw_text(text["text"], text["position"])
+
             for button in ui.get("buttons", ()):
                 rect = button["rect"]
-                pygame.draw.rect(self.screen, (245, 250, 255), rect)
+                pygame.draw.rect(
+                    self.screen, (245, 250, 255), rect
+                )
                 width, height = self.font.size(button["text"])
                 self.draw_text(
                     button["text"],
-                    (rect.centerx - width / 2, rect.centery - height / 2),
+                    (
+                        rect.centerx - width / 2,
+                        rect.centery - height / 2,
+                    ),
                     centered=False,
                 )
 
         pygame.display.flip()
-
