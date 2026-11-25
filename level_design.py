@@ -42,6 +42,10 @@ PLATFORM_RULES = [
 # 발판 하나가 움직이는 발판일 확률
 MOVING_PLATFORM_CHANCE = 0.7
 
+
+# 고정 발판 중 스프링 발판이 생성될 확률 (일반:스프링 = 7:3)
+SPRING_PLATFORM_CHANCE = 0.3
+
 # 움직이는 발판의 속도 (초당 월드 단위)
 # 속도 = 기본 속도 + 시작 발판에서 올라간 높이 × 증가량, 최고 속도를 넘지 않는다.
 # 느린 발판이 MOVING_MAX_SPEED_SCORE점(한 행 = 점수 1점)에서 최고 속도에 닿도록 증가량을 계산한다.
@@ -204,6 +208,9 @@ class Level:
                 platform.type = "moving"
                 platform.velocity_x = self.rng.choice((-speed, speed))
             else:
+                if self.rng.random() < SPRING_PLATFORM_CHANCE:
+                    platform.type = "spring"
+
                 static_x.append(x)
 
             self.platforms.append(platform)
