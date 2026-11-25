@@ -66,6 +66,8 @@ class ButtonTests(unittest.TestCase):
             ("SETTING", "돌아가기", "RETURN_HOME"),
             ("GAME_OVER", "다시하기", "RESTART"),
             ("GAME_OVER", "홈으로", "RETURN_HOME"),
+            ("PAUSED", "계속하기", "RESUME"),
+            ("PAUSED", "나가기", "RETURN_HOME"),
         ]
         for state, text, action in cases:
             with self.subTest(state=state, text=text):
@@ -86,6 +88,18 @@ class TextTests(unittest.TestCase):
         hud.update("WAITING", Mock())
 
         self.assertIn("Jump OverFlow", self.texts_of(hud))
+
+    def test_pause_shows_title_and_freezes_score(self):
+        hud = HUD()
+        player = Mock(position=pygame.Vector2(0, 0))
+        hud.update("PLAYING", player)
+        player.position.y = 300
+        hud.update("PLAYING", player)
+        player.position.y = 900
+        hud.update("PAUSED", player)
+        self.assertIn("일시정지", self.texts_of(hud))
+        self.assertEqual(hud.current_score, 3)
+        self.assertEqual(hud.high_score, 3)
 
     def test_game_over_shows_final_score(self):
         hud = HUD()

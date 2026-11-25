@@ -12,6 +12,7 @@ class GameState(StrEnum):
     WAITING = "WAITING"
     SETTING = "SETTING"
     PLAYING = "PLAYING"
+    PAUSED = "PAUSED"
     GAME_OVER = "GAME_OVER"
 
 
@@ -60,9 +61,11 @@ def handle_ui_action(game: Game, action: str | None):
             game.state = GameState.PLAYING
         case GameState.WAITING, "OPEN_SETTING":
             game.state = GameState.SETTING
-        case (GameState.SETTING | GameState.GAME_OVER), "RETURN_HOME":
+        case GameState.PAUSED, "RESUME":
+            game.state = GameState.PLAYING
+        case (GameState.SETTING | GameState.GAME_OVER | GameState.PAUSED), "RETURN_HOME":
             game.state = GameState.WAITING
-        case _, None | "START_GAME" | "RESTART" | "OPEN_SETTING" | "RETURN_HOME":
+        case _, None | "START_GAME" | "RESTART" | "OPEN_SETTING" | "RETURN_HOME" | "RESUME":
             return
         case _:
             raise ValueError(f"Unknown HUD action: {action!r}")
@@ -73,6 +76,13 @@ def handle_events(game: Game, events: list) -> bool:
         return False
 
     for event in events:
+        if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+            if not getattr(event, "repeat", False):
+                if game.state == GameState.PLAYING:
+                    game.state = GameState.PAUSED
+                elif game.state == GameState.PAUSED:
+                    game.state = GameState.PLAYING
+            continue
         action = game.hud.handle_event(event, game.state)
         handle_ui_action(game, action)
     return True
