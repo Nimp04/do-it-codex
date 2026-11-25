@@ -4,6 +4,7 @@
 Platform.position은 발판의 좌측 하단 좌표이다.
 """
 
+from collections import deque
 from dataclasses import dataclass
 import random
 
@@ -41,10 +42,26 @@ PLATFORM_RULES = [
 # 발판 하나가 움직이는 발판일 확률
 MOVING_PLATFORM_CHANCE = 0.7
 
-# 움직이는 발판의 속도 단계 (느림/보통/빠름, 초당 월드 단위)
-# 단계 사이 차이를 크게 두어 발판마다 속도 차이가 체감되게 한다.
-MOVING_SPEED_TIERS = (40, 120, 240)
-MOVING_SPEED_JITTER = 0.15
+
+# 고정 발판 중 스프링 발판이 생성될 확률 (일반:스프링 = 7:3)
+SPRING_PLATFORM_CHANCE = 0.3
+
+# 움직이는 발판의 속도 (초당 월드 단위)
+# 속도 = 기본 속도 + 시작 발판에서 올라간 높이 × 증가량, 최고 속도를 넘지 않는다.
+# 느린 발판이 MOVING_MAX_SPEED_SCORE점(한 행 = 점수 1점)에서 최고 속도에 닿도록 증가량을 계산한다.
+# 현재 값: 한 행마다 0.8씩 빨라져 빠른 발판은 175점, 느린 발판은 300점에서 300이 된다.
+# 스프링·점프 아이템으로 180점까지는 쉽게 오르므로 그 이후에도 난이도가 계속 오르게 한다.
+MOVING_BASE_SPEED = 60
+MOVING_MAX_SPEED = 300
+MOVING_MAX_SPEED_SCORE = 300
+MOVING_SPEED_PER_HEIGHT = (
+    (MOVING_MAX_SPEED - MOVING_BASE_SPEED) / (MOVING_MAX_SPEED_SCORE * ROW_GAP)
+)
+
+# 움직이는 발판의 절반은 빠른 발판으로, 같은 높이의 느린 발판보다 이 배율만큼 빠르다.
+# 둘 다 최고 속도에 막히므로 높이 올라갈수록 결국 모두 최고 속도가 된다.
+FAST_PLATFORM_CHANCE = 0.5
+FAST_SPEED_MULTIPLIER = 1.5
 
 # 행 사이에 장애물이 생길 확률과 크기
 # 높이는 행 간격(ROW_GAP)의 절반에서 발판 두께를 뺀 값보다 작아야 발판과 겹치지 않는다.
@@ -53,6 +70,16 @@ OBSTACLE_SIZE = (60, 30)
 
 # 처음 몇 행은 장애물 없이 시작한다.
 SAFE_ROWS = 3
+
+# shortcut: player.py의 jump_speed(800)와 gravity(1500)로 계산한 점프 높이(약 213). 그 값이 바뀌면 같이 고친다.
+PLAYER_JUMP_HEIGHT = 800 ** 2 / (2 * 1500)
+
+# 고정 발판에서 튀어 오른 플레이어 머리가 닿는 장애물 아래 행 수 (현재 3행).
+# 이 행들의 고정 발판 위 수직 경로에는 장애물을 두지 않아 제자리 점프로는 절대 부딪히지 않는다.
+OBSTACLE_CLEAR_ROWS = int(
+    (PLATFORM_HEIGHT + PLAYER_JUMP_HEIGHT + PLAYER_SIZE[1] - ROW_GAP / 2)
+    // ROW_GAP
+) + 1
 
 # 행마다 고정 발판 위에 아이템이 생길 확률과 종류
 ITEM_CHANCE = 0.08
@@ -104,7 +131,10 @@ class Level:
         )
 
         self.platforms.append(start_platform)
-        self.last_row_x = [int(start_x)]
+        # 최근 OBSTACLE_CLEAR_ROWS개 행의 고정 발판 x 좌표
+        self.recent_static_x = deque(
+            [[int(start_x)]], maxlen=OBSTACLE_CLEAR_ROWS
+        )
 
         # 시작 발판 위쪽으로 초기 발판을 미리 생성한다.
         for _ in range(INITIAL_ROWS):
@@ -174,18 +204,18 @@ class Level:
             )
 
             if self.rng.random() < MOVING_PLATFORM_CHANCE:
-                tier = self.rng.choice(MOVING_SPEED_TIERS)
-                speed = tier * self.rng.uniform(
-                    1 - MOVING_SPEED_JITTER, 1 + MOVING_SPEED_JITTER
-                )
+                speed = self._moving_speed(y)
                 platform.type = "moving"
                 platform.velocity_x = self.rng.choice((-speed, speed))
             else:
+                if self.rng.random() < SPRING_PLATFORM_CHANCE:
+                    platform.type = "spring"
+
                 static_x.append(x)
 
             self.platforms.append(platform)
 
-        # 고정 발판의 수직 경로만 비워 둔다.
+        # 점프가 닿는 아래 행들과 바로 위 행의 고정 발판 수직 경로를 비워 둔다.
         # 움직이는 발판은 제자리 점프로 기다리면 장애물 없는 위치로 온다.
         if (
             self.next_row_index > SAFE_ROWS
@@ -193,7 +223,7 @@ class Level:
         ):
             self._generate_obstacle(
                 y - ROW_GAP / 2,
-                self.last_row_x + static_x,
+                [x for row in self.recent_static_x for x in row] + static_x,
             )
 
         if (
@@ -203,8 +233,18 @@ class Level:
         ):
             self._generate_item(self.rng.choice(static_x), y)
 
-        self.last_row_x = static_x
+        self.recent_static_x.append(static_x)
         self.next_row_index += 1
+
+    def _moving_speed(self, y: float) -> float:
+        """생성 높이가 높을수록 빠른 속도를 느린/빠른 두 종류로 반환한다."""
+
+        speed = MOVING_BASE_SPEED + (y - START_Y) * MOVING_SPEED_PER_HEIGHT
+
+        if self.rng.random() < FAST_PLATFORM_CHANCE:
+            speed *= FAST_SPEED_MULTIPLIER
+
+        return min(speed, MOVING_MAX_SPEED)
 
     def _generate_obstacle(self, y: float, platform_xs: list[int]):
         """두 행 사이에 고정 발판의 수직 경로를 막지 않는 위치로 장애물을 만든다."""

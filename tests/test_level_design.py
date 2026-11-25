@@ -11,25 +11,67 @@ class LevelDesignTests(unittest.TestCase):
         # 충분히 많은 행을 생성해 확률적 요소가 모두 나오게 한다.
         self.level.update(0, 20000)
 
-    def test_moving_platform_ratio_and_speed_tiers(self):
-        platforms = self.level.get_platforms()
+    def test_moving_platform_ratio(self):
+        level = Level()
+        # 시드가 고정되지 않으므로 표본을 크게 잡아 비율이 흔들리지 않게 한다.
+        for _ in range(1000):
+            level._generate_next_row()
+        platforms = level.get_platforms()
         moving = [p for p in platforms if p.type == "moving"]
         self.assertAlmostEqual(
             len(moving) / len(platforms),
             level_design.MOVING_PLATFORM_CHANCE,
             delta=0.1,
         )
-        jitter = level_design.MOVING_SPEED_JITTER
-        used_tiers = set()
+
+    def test_moving_speed_grows_with_height_and_is_capped(self):
+        level = Level()
+        # 삭제 없이 행을 직접 생성해 낮은 행부터 상한 이후까지 모두 확인한다.
+        rows = level_design.MOVING_MAX_SPEED_SCORE + 100
+        for _ in range(rows):
+            level._generate_next_row()
+        moving = [p for p in level.get_platforms() if p.type == "moving"]
+
+        max_speed = level_design.MOVING_MAX_SPEED
+        fast_count = 0
         for p in moving:
-            speed = abs(p.velocity_x)
-            tier = next(
-                t for t in level_design.MOVING_SPEED_TIERS
-                if t * (1 - jitter) <= speed <= t * (1 + jitter)
+            base = (
+                level_design.MOVING_BASE_SPEED
+                + (p.position.y - level_design.START_Y)
+                * level_design.MOVING_SPEED_PER_HEIGHT
             )
-            used_tiers.add(tier)
-        # 느림/보통/빠름이 모두 나와야 속도 차이가 체감된다.
-        self.assertEqual(used_tiers, set(level_design.MOVING_SPEED_TIERS))
+            slow = min(base, max_speed)
+            fast = min(base * level_design.FAST_SPEED_MULTIPLIER, max_speed)
+            speed = abs(p.velocity_x)
+            # 느린 발판 또는 빠른 발판 두 가지 속도만 나온다.
+            self.assertTrue(
+                speed == slow or speed == fast,
+                f"y={p.position.y} speed={speed}",
+            )
+            if slow < fast and speed == fast:
+                fast_count += 1
+
+        def average_speed(rows):
+            ys = {level_design.START_Y + r * level_design.ROW_GAP for r in rows}
+            speeds = [abs(p.velocity_x) for p in moving if p.position.y in ys]
+            return sum(speeds) / len(speeds)
+
+        # 위쪽 행일수록 평균 속도가 빨라지고, 상한 이후에는 최고 속도에 붙는다.
+        self.assertLess(average_speed(range(1, 21)), average_speed(range(41, 61)))
+        self.assertTrue(any(abs(p.velocity_x) == max_speed for p in moving))
+
+        # 상한 전 구간에서는 빠른 발판이 실제로 섞여 나온다.
+        self.assertGreater(fast_count, 0)
+
+        # 충분히 높은 곳(느린 발판도 상한 도달)에서는 모두 최고 속도다.
+        cap_y = level_design.START_Y + (
+            (max_speed - level_design.MOVING_BASE_SPEED)
+            / level_design.MOVING_SPEED_PER_HEIGHT
+        )
+        self.assertTrue(all(
+            abs(p.velocity_x) == max_speed
+            for p in moving if p.position.y >= cap_y
+        ))
 
     def test_moving_platform_stays_in_world(self):
         for _ in range(600):
@@ -39,21 +81,27 @@ class LevelDesignTests(unittest.TestCase):
             self.assertTrue(0 <= p.position.x <= right)
 
     def test_obstacles_off_platforms_and_static_paths(self):
-        obstacles = self.level.get_obstacles()
+        level = Level()
+        for _ in range(1000):
+            level._generate_next_row()
+        obstacles = level.get_obstacles()
         self.assertTrue(obstacles)
+        # 고정 발판에서 제자리로 튀어 오른 플레이어 머리가 닿는 최고 높이
+        reach = level_design.PLAYER_JUMP_HEIGHT + level_design.PLAYER_SIZE[1]
         for o in obstacles:
             self.assertLess(o.size[0], level_design.PLATFORM_WIDTH)
-            nearby = [
-                p for p in self.level.get_platforms()
-                if abs(p.position.y - o.position.y) <= level_design.ROW_GAP / 2
-            ]
-            for p in nearby:
+            for p in level.get_platforms():
+                top = p.position.y + p.size[1]
                 # 장애물은 위아래 어떤 발판과도 세로로 겹치지 않는다.
-                self.assertTrue(
-                    o.position.y >= p.position.y + p.size[1]
-                    or o.position.y + o.size[1] <= p.position.y
-                )
-                if p.type == "moving":
+                if abs(p.position.y - o.position.y) <= level_design.ROW_GAP / 2:
+                    self.assertTrue(
+                        o.position.y >= top
+                        or o.position.y + o.size[1] <= p.position.y
+                    )
+                # 바로 위 행(내려오며 지나는 경로)과 점프가 닿는 아래 행들만 검사한다.
+                above = 0 < p.position.y - o.position.y <= level_design.ROW_GAP / 2
+                below = top <= o.position.y < top + reach
+                if p.type == "moving" or not (above or below):
                     continue
                 # 고정 발판의 수직 통로는 비워 둔다.
                 self.assertTrue(

@@ -7,6 +7,9 @@ import pygame
 
 from config import WORLD_ORIGIN, WORLD_WIDTH,PLAYER_SIZE
 
+SPRING_JUMP_MULTIPLIER = 2
+
+
 class PlayerState(StrEnum):
     JUMPING = "JUMPING"
     FALLING = "FALLING"
@@ -115,6 +118,7 @@ class Player:
         player_right = self.position.x + self.size[0]
         current_bottom = self.position.y
 
+        landing_platform = None
         landing_top = None
         for platform in platforms:
             platform_left = platform.position.x
@@ -127,13 +131,16 @@ class Player:
                 and self.previous_bottom >= platform_top >= current_bottom
             ):
                 if landing_top is None or platform_top > landing_top:
+                    landing_platform = platform
                     landing_top = platform_top
 
-        if landing_top is not None:
+        if landing_platform is not None:
             self.landing_height = landing_top
             self.landing_age = 0.0
             self.position.y = landing_top
             self.velocity.y = self.jump_speed
+            if getattr(landing_platform, "type", "normal") == "spring":
+                self.velocity.y *= SPRING_JUMP_MULTIPLIER
             self.state = PlayerState.JUMPING
 
         return events
