@@ -191,7 +191,7 @@ class Renderer:
         """
         self.background.draw(self.screen, self.camera.position)
 
-        if game_state in ("PLAYING", "GAME_OVER"):
+        if game_state in ("PLAYING", "PAUSED", "GAME_OVER"):
             for platform in platforms:
                 platform_type = getattr(platform, "type", "normal")
 
@@ -227,7 +227,7 @@ class Renderer:
         if hud is not None:
             ui = hud.get_ui_data()
 
-            if game_state in ("PLAYING", "GAME_OVER"):
+            if game_state in ("PLAYING", "PAUSED", "GAME_OVER"):
                 self.draw_text(
                     f"Score: {ui['current_score']}",
                     (12, 12),
