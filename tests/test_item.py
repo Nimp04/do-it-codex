@@ -60,7 +60,7 @@ class UseAndSwapTests(unittest.TestCase):
             self.manager.update(1 / 60)
 
         self.assertIsNone(self.player.item_slots[0])
-        self.assertEqual(self.player.velocity.y, self.player.jump_speed)
+        self.assertEqual(self.player.velocity.y, self.player.jump_speed + 200)
 
     def test_alt_key_swaps_slots(self):
         with unittest.mock.patch.object(

@@ -26,6 +26,8 @@ class Player:
         self.jump_speed = 800
         self.gravity = 1500
         self.previous_bottom = 0
+        self.landing_height = None
+        self.landing_age = 0.0
         self._pending_motion = None
         self.is_ghost = False
 
@@ -33,6 +35,8 @@ class Player:
         self.position = pygame.Vector2(spawn_position)
         self.velocity = pygame.Vector2(0, self.jump_speed)
         self.previous_bottom = self.position.y
+        self.landing_height = None
+        self.landing_age = 0.0
         self.state = PlayerState.JUMPING
         self._pending_motion = None
         self.is_ghost = False
@@ -85,6 +89,8 @@ class Player:
         while remaining > 0:
             step = min(remaining, 1 / 120)
             self._move(step)
+            if self.landing_height is not None:
+                self.landing_age += step
             for event in self._check_collisions(platforms, obstacles, items):
                 if event["type"] == "GAME_OVER":
                     return [event]
@@ -129,9 +135,11 @@ class Player:
                     landing_top = platform_top
 
         if landing_platform is not None:
+            self.landing_height = landing_top
+            self.landing_age = 0.0
             self.position.y = landing_top
             self.velocity.y = self.jump_speed
-            if landing_platform.type == "spring":
+            if getattr(landing_platform, "type", "normal") == "spring":
                 self.velocity.y *= SPRING_JUMP_MULTIPLIER
             self.state = PlayerState.JUMPING
 

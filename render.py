@@ -18,6 +18,10 @@ ITEM_STYLES = {
     GHOST: ("고", (190, 150, 240)),
     SHRINK: ("소", (80, 200, 190)),
 }
+LANDING_FOOT_HOLD_TIME = 0.016
+LANDING_FOOT_RELEASE_TIME = 0.032
+LANDING_SQUASH_TIME = 0.06
+LANDING_ANIMATION_TIME = 0.22
 
 
 class Camera:
@@ -93,18 +97,69 @@ class Renderer:
             - (position.y - self.camera.position.y) * self.scale,
         )
 
-    def draw_object(self, obj, color):
+    def _object_rect(self, obj):
         position = self.world_to_screen(obj.position)
         width, height = obj.size
-        # shortcut: 게임 객체는 단색 사각형이다. 스프라이트 자산 확정 후 교체한다.
-        rect = pygame.Rect(
+        return pygame.Rect(
             position.x,
             position.y - height * self.scale,
             width * self.scale,
             height * self.scale,
         )
+
+    def draw_object(self, obj, color):
+        rect = self._object_rect(obj)
         pygame.draw.rect(self.screen, color, rect)
         return rect
+
+    def draw_obstacle(self, obstacle):
+        rect = self._object_rect(obstacle)
+        side = min(rect.width, rect.height)
+        body = pygame.Rect(0, 0, side, side)
+        body.center = rect.center
+        quarter = side // 4
+        for edge, tip in ((body.left, rect.left), (body.right - 1, rect.right - 1)):
+            pygame.draw.polygon(self.screen, (100, 110, 125), (
+                (edge, body.top),
+                (tip, body.top + quarter),
+                (edge, body.centery),
+                (tip, body.bottom - 1 - quarter),
+                (edge, body.bottom - 1),
+            ))
+        pygame.draw.rect(self.screen, (65, 75, 90), body)
+
+    def draw_player(self, player, effect_times):
+        color = (
+            ITEM_STYLES[GHOST][1] if getattr(player, "is_ghost", False)
+            else (55, 110, 220)
+        )
+        remaining = min((time for time in effect_times if time > 0), default=0.0)
+        if 0 < remaining <= 3.0:
+            blink_rate = 3 if remaining <= 1.0 else 1
+            if int((3.0 - remaining) * 2 * blink_rate) % 2 == 0:
+                color = tuple(255 - channel for channel in color)
+
+        rect = self._object_rect(player)
+        velocity = getattr(player, "velocity", None)
+        if velocity is not None:
+            speed_ratio = min(abs(velocity.y) / player.jump_speed, 1.0)
+            stretch_amount = 0.25 if velocity.y >= 0 else 0.12
+            stretch = 1.0 + stretch_amount * speed_ratio
+            landing_height = getattr(player, "landing_height", None)
+            if landing_height is not None and player.landing_age < LANDING_ANIMATION_TIME:
+                recovery_elapsed = max(0.0, player.landing_age - LANDING_SQUASH_TIME)
+                recovery = recovery_elapsed / (LANDING_ANIMATION_TIME - LANDING_SQUASH_TIME)
+                compression = (1 - recovery) ** 2
+                stretch += (0.75 - stretch) * compression
+                # 착지 프레임에 발판에 붙인 발을 상승 위치로 빠르게 돌려준다.
+                foot_elapsed = max(0.0, player.landing_age - LANDING_FOOT_HOLD_TIME)
+                foot_release = min(1.0, foot_elapsed / LANDING_FOOT_RELEASE_TIME)
+                lift = (player.position.y - landing_height) * self.scale
+                rect.bottom += round(lift * (1 - foot_release) ** 2)
+            feet = rect.midbottom
+            rect.size = (round(rect.width / stretch), round(rect.height * stretch))
+            rect.midbottom = feet
+        pygame.draw.rect(self.screen, color, rect)
 
     def draw_item_label(self, item_type, rect):
         label = self.item_font.render(
@@ -124,7 +179,7 @@ class Renderer:
 
     def render(
         self, game_state, player, platforms,
-        obstacles=(), items=(), hud=None,
+        obstacles=(), items=(), hud=None, *, effect_times=(),
     ):
         """카메라는 main이 갱신하며, 여기서는 객체 상태를 읽고 출력만 한다.
 
@@ -132,6 +187,7 @@ class Renderer:
         item_slots: 아이템 종류 또는 None을 담은 길이 2 목록. 화면 우상단에 표시한다.
         texts: {"text": str, "position": 화면 좌표} 목록.
         buttons: {"text": str, "rect": pygame.Rect(화면 좌표)} 목록.
+        effect_times: 고스트와 소형화 효과의 남은 시간(초).
         """
         self.background.draw(self.screen, self.camera.position)
 
@@ -157,7 +213,7 @@ class Renderer:
                     )
 
             for obstacle in obstacles:
-                self.draw_object(obstacle, (100, 110, 125))
+                self.draw_obstacle(obstacle)
 
             for item in items:
                 rect = self.draw_object(
@@ -166,12 +222,7 @@ class Renderer:
                 self.draw_item_label(item.item_type, rect)
 
             if player is not None:
-                color = (
-                    ITEM_STYLES[GHOST][1]
-                    if getattr(player, "is_ghost", False)
-                    else (55, 110, 220)
-                )
-                self.draw_object(player, color)
+                self.draw_player(player, effect_times)
 
         if hud is not None:
             ui = hud.get_ui_data()
