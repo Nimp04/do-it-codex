@@ -1,7 +1,14 @@
-"""발판과 레벨 생성을 담당하는 모듈.
+"""발판·장애물·아이템 배치를 생성하고 관리하는 모듈.
 
-월드 좌표는 x가 오른쪽, y가 위쪽으로 증가한다.
-Platform.position은 발판의 좌측 하단 좌표이다.
+월드 좌표는 x가 오른쪽, y가 위쪽으로 증가하며 모든 position은 좌측 하단 좌표이다.
+점수 1점 = 한 행(ROW_GAP)이다.
+
+장애물 배치 규칙 (피할 수 없는 패턴이 나오지 않게 한다)
+1. 어떤 발판이든 방향키 없이 제자리로 뛰기만 하면 장애물에 닿지 않는다.
+   - 고정 발판 위 수직 통로에는 장애물을 두지 않는다.
+   - 장애물 아래의 움직이는 발판은 장애물 반대쪽에서만 왕복하게 범위를 줄인다.
+2. 장애물끼리 OBSTACLE_CLEAR_ROWS행 이상 띄워, 장애물을 넘어가는 점프 경로에는
+   다른 장애물이 없게 한다.
 """
 
 from collections import deque
@@ -14,87 +21,62 @@ from config import PLAYER_SIZE, WORLD_ORIGIN, WORLD_WIDTH
 from item import DOUBLE_JUMP, GHOST, SHRINK, ITEM_SIZE, Item
 
 
-# 발판 크기
+# 발판
 PLATFORM_WIDTH = 100
 PLATFORM_HEIGHT = 15
+PLATFORM_MIN_X = WORLD_ORIGIN[0]
+PLATFORM_MAX_X = WORLD_ORIGIN[0] + WORLD_WIDTH - PLATFORM_WIDTH
 
-# 시작 발판 위치
-START_Y = 750
+# 행 배치
+START_Y = 750  # 시작 발판 높이
+ROW_GAP = 100  # 행 사이 간격
+INITIAL_ROWS = 10  # reset 때 미리 생성할 행 수
+GENERATE_AHEAD = 1200  # 플레이어보다 이만큼 위까지 미리 생성한다.
+CLEANUP_BELOW = 1200  # 플레이어보다 이만큼 아래는 삭제한다.
 
-# 발판 행 사이의 간격
-ROW_GAP = 100
+# 행마다 생성할 발판 개수와 가중치
+PLATFORM_RULES = [(1, 0.8), (2, 0.2)]
 
-# 처음에 미리 생성할 행 수
-INITIAL_ROWS = 10
+# 난이도는 시작 높이에서 MOVING_MAX_SPEED_SCORE점 높이까지 직선으로 오르고 그 뒤로 유지된다.
+MOVING_MAX_SPEED_SCORE = 300
 
-# 플레이어보다 이 높이만큼 위까지 발판을 미리 생성한다.
-GENERATE_AHEAD = 1200
-
-# 플레이어보다 충분히 아래에 있는 발판은 삭제한다.
-CLEANUP_BELOW = 1200
-
-# 행마다 생성할 발판 개수와 선택 확률
-PLATFORM_RULES = [
-    (1, 0.8),
-    (2, 0.2),
-]
-
-# 발판 하나가 움직이는 발판일 확률. 시작 높이에서 START, 느린 발판이 최고 속도가 되는
-# 높이(MOVING_MAX_SPEED_SCORE점)에서 END가 되도록 직선으로 늘리고 그 뒤로는 유지한다.
+# 발판 하나가 움직이는 발판일 확률 (반반 → 8:2)
 MOVING_PLATFORM_CHANCE_START = 0.5
 MOVING_PLATFORM_CHANCE_END = 0.8
 
-
-# 고정 발판 중 스프링 발판이 생성될 확률 (일반:스프링 = 7:3)
+# 고정 발판 중 스프링 발판의 비율 (일반:스프링 = 7:3)
 SPRING_PLATFORM_CHANCE = 0.3
 
-# 움직이는 발판의 속도 (초당 월드 단위)
-# 속도 = 기본 속도 + 시작 발판에서 올라간 높이 × 증가량, 최고 속도를 넘지 않는다.
-# 느린 발판이 MOVING_MAX_SPEED_SCORE점(한 행 = 점수 1점)에서 최고 속도에 닿도록 증가량을 계산한다.
-# 현재 값: 한 행마다 0.8씩 빨라져 빠른 발판은 175점, 느린 발판은 300점에서 300이 된다.
-# 스프링·점프 아이템으로 180점까지는 쉽게 오르므로 그 이후에도 난이도가 계속 오르게 한다.
+# 움직이는 발판 속도 (초당 월드 단위). 한 행마다 0.8씩 빨라져 느린 발판은 300점,
+# 빠른 발판(1.5배, 절반 확률)은 175점에서 최고 속도에 닿는다.
 MOVING_BASE_SPEED = 60
 MOVING_MAX_SPEED = 300
-MOVING_MAX_SPEED_SCORE = 300
 MOVING_SPEED_PER_HEIGHT = (
     (MOVING_MAX_SPEED - MOVING_BASE_SPEED) / (MOVING_MAX_SPEED_SCORE * ROW_GAP)
 )
-
-# 움직이는 발판의 절반은 빠른 발판으로, 같은 높이의 느린 발판보다 이 배율만큼 빠르다.
-# 둘 다 최고 속도에 막히므로 높이 올라갈수록 결국 모두 최고 속도가 된다.
 FAST_PLATFORM_CHANCE = 0.5
 FAST_SPEED_MULTIPLIER = 1.5
 
-# 행 사이에 장애물이 생길 확률과 크기. 확률은 움직이는 발판 비율과 같은 방식으로 늘린다.
-# 한 층에는 장애물을 최대 하나만 두고, 장애물끼리 OBSTACLE_CLEAR_ROWS행 간격을 두므로
-# 실제 출현율은 행당 확률보다 낮다(START 0.25 → 100행당 약 17개, END 0.5 → 약 25개).
-# 높이는 행 간격(ROW_GAP)의 절반에서 발판 두께를 뺀 값보다 작아야 발판과 겹치지 않는다.
+# 장애물. 두 행 사이 가운데에 생기고, 한 층에 최대 하나다.
+# 간격 규칙 때문에 실제 출현율은 100행당 약 17개(시작) → 25개(최대)이다.
 OBSTACLE_CHANCE_START = 0.25
 OBSTACLE_CHANCE_END = 0.5
-OBSTACLE_SIZE = (60, 30)
-
-# 처음 몇 행은 장애물 없이 시작한다.
-SAFE_ROWS = 3
-
-# 장애물을 피하려고 왕복 범위가 줄어든 움직이는 발판도 최소한 이만큼은 움직인다.
-MIN_PATROL = 150
+OBSTACLE_SIZE = (60, 30)  # 높이는 ROW_GAP / 2 - PLATFORM_HEIGHT보다 작아야 발판과 겹치지 않는다.
+SAFE_ROWS = 3  # 처음 몇 행은 장애물 없이 시작한다.
+MIN_PATROL = 150  # 범위가 줄어든 움직이는 발판도 최소한 이만큼은 왕복한다.
 
 # shortcut: player.py의 jump_speed(800)와 gravity(1500)로 계산한 점프 높이(약 213). 그 값이 바뀌면 같이 고친다.
 PLAYER_JUMP_HEIGHT = 800 ** 2 / (2 * 1500)
 
-# 고정 발판에서 튀어 오른 플레이어 머리가 닿는 장애물 아래 행 수 (현재 3행).
-# 이 행들의 고정 발판 위 수직 경로에는 장애물을 두지 않아 제자리 점프로는 절대 부딪히지 않는다.
+# 제자리 점프한 플레이어 머리가 닿는, 장애물 아래 행 수 (현재 3행)
 OBSTACLE_CLEAR_ROWS = int(
-    (PLATFORM_HEIGHT + PLAYER_JUMP_HEIGHT + PLAYER_SIZE[1] - ROW_GAP / 2)
-    // ROW_GAP
+    (PLATFORM_HEIGHT + PLAYER_JUMP_HEIGHT + PLAYER_SIZE[1] - ROW_GAP / 2) // ROW_GAP
 ) + 1
 
-# 행마다 고정 발판 위에 아이템이 생길 확률과 종류
+# 아이템. 행마다 고정 발판 하나 위에 ITEM_CHANCE 확률로 띄워 놓는다.
 ITEM_CHANCE = 0.08
 ITEM_TYPES = (DOUBLE_JUMP, GHOST, SHRINK)
-
-# 아이템을 발판 윗면에서 띄우는 높이
-ITEM_FLOAT = 10
+ITEM_FLOAT = 10  # 발판 윗면에서 띄우는 높이
 
 
 @dataclass
@@ -105,7 +87,7 @@ class Platform:
     size: tuple[int, int]
     type: str = "normal"
     velocity_x: float = 0.0
-    # 발판 좌측 x가 오갈 수 있는 범위. 고정 발판은 min_x == max_x == position.x이다.
+    # 좌측 x가 오갈 수 있는 범위. 고정 발판은 min_x == max_x == position.x이다.
     min_x: float | None = None
     max_x: float | None = None
 
@@ -123,103 +105,53 @@ class Level:
         self.reset()
 
     def reset(self):
-        """레벨을 초기화하고 초기 발판을 생성한다."""
+        """레벨을 초기화하고 초기 발판을 생성한다. 시드를 고정하지 않아 매번 새 맵이 된다."""
 
-        # 시드를 고정하지 않아 reset(다시하기)마다 새로운 맵이 생성된다.
         self.rng = random.Random()
-
         self.platforms: list[Platform] = []
         self.obstacles: list[Platform] = []
-
-        # 다음에 생성할 행 번호
         self.next_row_index = 1
-        # 마지막으로 장애물을 만든 행 번호
         self.last_obstacle_row = -OBSTACLE_CLEAR_ROWS
 
-        # 시작 발판
-        start_x = (
-            WORLD_ORIGIN[0]
-            + (WORLD_WIDTH - PLATFORM_WIDTH) / 2
-        )
-
         start_platform = Platform(
-            position=pygame.Vector2(start_x, START_Y),
-            size=(PLATFORM_WIDTH, PLATFORM_HEIGHT),
+            pygame.Vector2(WORLD_ORIGIN[0] + (WORLD_WIDTH - PLATFORM_WIDTH) / 2, START_Y),
+            (PLATFORM_WIDTH, PLATFORM_HEIGHT),
         )
-
         self.platforms.append(start_platform)
-        # 최근 OBSTACLE_CLEAR_ROWS개 행의 발판
-        self.recent_rows = deque(
-            [[start_platform]], maxlen=OBSTACLE_CLEAR_ROWS
-        )
+        # 새 장애물이 수직 통로를 비워 줘야 하는 아래 행들의 발판
+        self.recent_rows = deque([[start_platform]], maxlen=OBSTACLE_CLEAR_ROWS)
 
-        # 시작 발판 위쪽으로 초기 발판을 미리 생성한다.
         for _ in range(INITIAL_ROWS):
             self._generate_next_row()
 
-    def _choose_platform_count(self) -> int:
-        """해당 행에 생성할 발판 개수를 확률에 따라 결정한다."""
+    def _generate_platform_positions(self) -> list[int]:
+        """한 행에서 서로 겹치지 않는 발판 x 좌표들을 고른다."""
 
         counts, weights = zip(*PLATFORM_RULES)
+        count = self.rng.choices(counts, weights=weights)[0]
 
-        return self.rng.choices(counts, weights=weights)[0]
-
-    def _generate_platform_positions(
-        self,
-        platform_count: int,
-    ) -> list[int]:
-        """한 행에서 서로 겹치지 않는 발판 x 좌표를 생성한다."""
-
-        left_bound = WORLD_ORIGIN[0]
-        right_bound = left_bound + WORLD_WIDTH - PLATFORM_WIDTH
-
-        # 20 단위로 발판 위치 후보를 생성한다.
-        available_x = list(
-            range(left_bound, right_bound + 1, 20)
-        )
-
-        # 월드 오른쪽 끝도 후보에 포함한다.
-        if right_bound not in available_x:
-            available_x.append(right_bound)
-
+        available_x = list(range(PLATFORM_MIN_X, PLATFORM_MAX_X + 1, 20))
+        if PLATFORM_MAX_X not in available_x:
+            available_x.append(PLATFORM_MAX_X)
         self.rng.shuffle(available_x)
 
         selected_x = []
-
         for x in available_x:
-            # 같은 행의 발판끼리 겹치지 않도록 한다.
-            overlaps = any(
-                abs(x - previous_x) < PLATFORM_WIDTH
-                for previous_x in selected_x
-            )
-
-            if not overlaps:
+            if all(abs(x - other) >= PLATFORM_WIDTH for other in selected_x):
                 selected_x.append(x)
-
-            if len(selected_x) == platform_count:
+            if len(selected_x) == count:
                 break
 
         return selected_x
 
     def _generate_next_row(self):
-        """다음 발판 행을 생성하고 레벨에 추가한다."""
+        """다음 행의 발판을 만들고, 확률에 따라 그 아래 층에 장애물, 발판 위에 아이템을 둔다."""
 
         y = START_Y + self.next_row_index * ROW_GAP
-
-        platform_count = self._choose_platform_count()
-
-        selected_x = self._generate_platform_positions(
-            platform_count
-        )
-
-        static_x = []
         row = []
 
-        for x in selected_x:
-            platform = Platform(
-                position=pygame.Vector2(x, y),
-                size=(PLATFORM_WIDTH, PLATFORM_HEIGHT),
-            )
+        for x in self._generate_platform_positions():
+            platform = Platform(pygame.Vector2(x, y), (PLATFORM_WIDTH, PLATFORM_HEIGHT))
 
             if self.rng.random() < self._chance_at(
                 y, MOVING_PLATFORM_CHANCE_START, MOVING_PLATFORM_CHANCE_END
@@ -227,20 +159,15 @@ class Level:
                 speed = self._moving_speed(y)
                 platform.type = "moving"
                 platform.velocity_x = self.rng.choice((-speed, speed))
-                platform.min_x = WORLD_ORIGIN[0]
-                platform.max_x = WORLD_ORIGIN[0] + WORLD_WIDTH - PLATFORM_WIDTH
-            else:
-                if self.rng.random() < SPRING_PLATFORM_CHANCE:
-                    platform.type = "spring"
-
-                static_x.append(x)
+                platform.min_x, platform.max_x = PLATFORM_MIN_X, PLATFORM_MAX_X
+            elif self.rng.random() < SPRING_PLATFORM_CHANCE:
+                platform.type = "spring"
 
             self.platforms.append(platform)
             row.append(platform)
 
-        # 점프가 닿는 아래 행들의 모든 발판과 바로 위 행의 고정 발판이 수직 경로를 비운다.
-        # 점프 한 번이 OBSTACLE_CLEAR_ROWS개 층을 지나므로, 장애물끼리 그만큼 띄워
-        # 장애물을 옆으로 넘어가는 점프 경로에 다른 장애물이 없게 한다.
+        static = [p for p in row if p.velocity_x == 0]
+
         if (
             self.next_row_index > SAFE_ROWS
             and self.next_row_index - self.last_obstacle_row >= OBSTACLE_CLEAR_ROWS
@@ -248,18 +175,13 @@ class Level:
                 y, OBSTACLE_CHANCE_START, OBSTACLE_CHANCE_END
             )
         ):
+            # 바로 위 행의 고정 발판도 포함해, 아래에서 올라와 착지하는 통로를 비운다.
             self._generate_obstacle(
-                y - ROW_GAP / 2,
-                [p for r in self.recent_rows for p in r]
-                + [p for p in row if p.velocity_x == 0],
+                y - ROW_GAP / 2, [p for r in self.recent_rows for p in r] + static
             )
 
-        if (
-            self.item_manager is not None
-            and static_x
-            and self.rng.random() < ITEM_CHANCE
-        ):
-            self._generate_item(self.rng.choice(static_x), y)
+        if self.item_manager is not None and static and self.rng.random() < ITEM_CHANCE:
+            self._generate_item(self.rng.choice(static))
 
         self.recent_rows.append(row)
         self.next_row_index += 1
@@ -268,21 +190,22 @@ class Level:
         """시작 높이의 start에서 MOVING_MAX_SPEED_SCORE점 높이의 end까지 직선으로 늘어난 확률."""
 
         progress = min((y - START_Y) / (MOVING_MAX_SPEED_SCORE * ROW_GAP), 1)
-
         return start + (end - start) * progress
 
     def _moving_speed(self, y: float) -> float:
-        """생성 높이가 높을수록 빠른 속도를 느린/빠른 두 종류로 반환한다."""
+        """생성 높이에 따른 느린/빠른 두 종류의 속도를 최고 속도 이하로 반환한다."""
 
         speed = MOVING_BASE_SPEED + (y - START_Y) * MOVING_SPEED_PER_HEIGHT
-
         if self.rng.random() < FAST_PLATFORM_CHANCE:
             speed *= FAST_SPEED_MULTIPLIER
-
         return min(speed, MOVING_MAX_SPEED)
 
     def _range_avoiding(self, platform: Platform, obstacle_x: float):
-        """장애물을 피하는 발판의 왕복 범위 (min_x, max_x). 불가능하면 None."""
+        """장애물 위치 obstacle_x를 피하는 발판의 왕복 범위 (min_x, max_x). 불가능하면 None.
+
+        발판 위 플레이어(발판에 걸쳐 있는 모든 위치)가 장애물과 가로로 겹치지 않는 범위 중
+        더 넓은 쪽을 고른다. 고정 발판은 범위가 한 점이므로 피하는지 여부만 판정된다.
+        """
 
         left = (
             platform.min_x,
@@ -298,23 +221,16 @@ class Level:
         return max(ranges, key=lambda r: r[1] - r[0], default=None)
 
     def _generate_obstacle(self, y: float, platforms: list[Platform]):
-        """두 행 사이에, 발판에서 제자리로 뛰기만 하면 절대 닿지 않는 위치로 장애물을 만든다.
+        """platforms 모두가 피할 수 있는 위치에 장애물을 만들고, 움직이는 발판의 범위를 줄인다.
 
-        움직이는 발판은 장애물 아래로 오지 않도록 한쪽으로 왕복 범위를 줄인다.
-        새 장애물은 화면 밖 위쪽에 생기므로 범위가 바뀌는 모습은 보이지 않는다.
+        새 장애물과 영향받는 행은 화면 밖 위쪽이라 범위가 바뀌는 모습은 보이지 않는다.
         """
 
-        width = OBSTACLE_SIZE[0]
-        left_bound = WORLD_ORIGIN[0]
-        right_bound = left_bound + WORLD_WIDTH - width
-
-        # 발판이 오가는 범위 위 수직 통로(좌우로 플레이어 너비만큼 여유)를 피한다.
         candidates = [
             x
-            for x in range(left_bound, right_bound + 1, 10)
+            for x in range(PLATFORM_MIN_X, WORLD_ORIGIN[0] + WORLD_WIDTH - OBSTACLE_SIZE[0] + 1, 10)
             if all(self._range_avoiding(p, x) for p in platforms)
         ]
-
         if not candidates:
             return
 
@@ -323,30 +239,19 @@ class Level:
 
         for platform in platforms:
             if platform.velocity_x:
-                platform.min_x, platform.max_x = self._range_avoiding(
-                    platform, obstacle_x
-                )
-                platform.position.x = min(
-                    max(platform.position.x, platform.min_x), platform.max_x
-                )
+                platform.min_x, platform.max_x = self._range_avoiding(platform, obstacle_x)
+                platform.position.x = min(max(platform.position.x, platform.min_x), platform.max_x)
 
         self.obstacles.append(
-            Platform(
-                position=pygame.Vector2(obstacle_x, y),
-                size=OBSTACLE_SIZE,
-                type="obstacle",
-            )
+            Platform(pygame.Vector2(obstacle_x, y), OBSTACLE_SIZE, type="obstacle")
         )
 
-    def _generate_item(self, platform_x: int, platform_y: float):
-        """고정 발판 가운데 위에 아이템을 띄워 놓는다."""
+    def _generate_item(self, platform: Platform):
+        """고정 발판 가운데 위에 무작위 아이템을 띄워 놓는다."""
 
-        x = platform_x + (PLATFORM_WIDTH - ITEM_SIZE[0]) / 2
-        y = platform_y + PLATFORM_HEIGHT + ITEM_FLOAT
-
-        self.item_manager.add_item(
-            Item((x, y), self.rng.choice(ITEM_TYPES))
-        )
+        x = platform.position.x + (PLATFORM_WIDTH - ITEM_SIZE[0]) / 2
+        y = platform.position.y + PLATFORM_HEIGHT + ITEM_FLOAT
+        self.item_manager.add_item(Item((x, y), self.rng.choice(ITEM_TYPES)))
 
     def _move_platforms(self, dt: float):
         """움직이는 발판을 좌우로 이동시키고 왕복 범위 끝에서 튕긴다."""
@@ -365,62 +270,35 @@ class Level:
                 platform.velocity_x = -abs(platform.velocity_x)
 
     def update(self, dt: float, player_y: float):
-        """발판을 움직이고, 플레이어 높이에 맞춰 발판을 생성·삭제한다."""
+        """발판을 움직이고, 플레이어 높이에 맞춰 위쪽을 생성하고 아래쪽을 삭제한다."""
 
         self._move_platforms(dt)
 
-        # 플레이어보다 충분히 위쪽까지 발판을 미리 생성한다.
-        target_y = player_y + GENERATE_AHEAD
-
-        while (
-            START_Y + self.next_row_index * ROW_GAP
-            <= target_y
-        ):
+        while START_Y + self.next_row_index * ROW_GAP <= player_y + GENERATE_AHEAD:
             self._generate_next_row()
 
-        # 플레이어보다 충분히 아래에 있는 발판을 제거한다.
         cleanup_y = player_y - CLEANUP_BELOW
-
-        self.platforms = [
-            platform
-            for platform in self.platforms
-            if platform.position.y >= cleanup_y
-        ]
-
-        self.obstacles = [
-            obstacle
-            for obstacle in self.obstacles
-            if obstacle.position.y >= cleanup_y
-        ]
+        self.platforms = [p for p in self.platforms if p.position.y >= cleanup_y]
+        self.obstacles = [o for o in self.obstacles if o.position.y >= cleanup_y]
 
         if self.item_manager is not None:
             # shortcut: ItemManager에 삭제 함수가 없어 get_items() 리스트를 직접 거른다. 삭제 API가 생기면 교체한다.
             items = self.item_manager.get_items()
-            items[:] = [
-                item for item in items if item.position.y >= cleanup_y
-            ]
+            items[:] = [i for i in items if i.position.y >= cleanup_y]
 
     def get_platforms(self) -> list[Platform]:
         """Player와 Renderer가 사용할 발판 목록을 반환한다."""
         return self.platforms
 
     def get_obstacles(self) -> list[Platform]:
-        """장애물 목록을 반환한다. 적도 장애물로 통합한다."""
+        """Player와 Renderer가 사용할 장애물 목록을 반환한다."""
         return self.obstacles
 
     def get_spawn_position(self) -> pygame.Vector2:
-        """Player가 시작 발판 위에 생성될 좌측 하단 위치를 반환한다."""
+        """reset 직후 시작 발판 가운데 위의 플레이어 좌측 하단 위치를 반환한다."""
 
-        start_platform = self.platforms[0]
-
-        spawn_x = (
-            start_platform.position.x
-            + (start_platform.size[0] - PLAYER_SIZE[0]) / 2
+        start = self.platforms[0]
+        return pygame.Vector2(
+            start.position.x + (start.size[0] - PLAYER_SIZE[0]) / 2,
+            start.position.y + start.size[1],
         )
-
-        spawn_y = (
-            start_platform.position.y
-            + start_platform.size[1]
-        )
-
-        return pygame.Vector2(spawn_x, spawn_y)
