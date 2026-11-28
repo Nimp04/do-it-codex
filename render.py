@@ -190,8 +190,9 @@ class Renderer:
         effect_times: 고스트와 소형화 효과의 남은 시간(초).
         """
         self.background.draw(self.screen, self.camera.position)
+        show_playfield = game_state in ("PLAYING", "GAME_OVER")
 
-        if game_state in ("PLAYING", "PAUSED", "GAME_OVER"):
+        if show_playfield:
             for platform in platforms:
                 platform_type = getattr(platform, "type", "normal")
 
@@ -227,7 +228,7 @@ class Renderer:
         if hud is not None:
             ui = hud.get_ui_data()
 
-            if game_state in ("PLAYING", "PAUSED", "GAME_OVER"):
+            if show_playfield:
                 self.draw_text(
                     f"Score: {ui['current_score']}",
                     (12, 12),
