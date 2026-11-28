@@ -71,6 +71,9 @@ OBSTACLE_SIZE = (60, 30)
 # 처음 몇 행은 장애물 없이 시작한다.
 SAFE_ROWS = 3
 
+# 장애물을 피하려고 왕복 범위가 줄어든 움직이는 발판도 최소한 이만큼은 움직인다.
+MIN_PATROL = 150
+
 # shortcut: player.py의 jump_speed(800)와 gravity(1500)로 계산한 점프 높이(약 213). 그 값이 바뀌면 같이 고친다.
 PLAYER_JUMP_HEIGHT = 800 ** 2 / (2 * 1500)
 
@@ -97,6 +100,13 @@ class Platform:
     size: tuple[int, int]
     type: str = "normal"
     velocity_x: float = 0.0
+    # 발판 좌측 x가 오갈 수 있는 범위. 고정 발판은 min_x == max_x == position.x이다.
+    min_x: float | None = None
+    max_x: float | None = None
+
+    def __post_init__(self):
+        if self.min_x is None:
+            self.min_x = self.max_x = self.position.x
 
 
 class Level:
@@ -118,6 +128,8 @@ class Level:
 
         # 다음에 생성할 행 번호
         self.next_row_index = 1
+        # 마지막으로 장애물을 만든 행 번호
+        self.last_obstacle_row = -OBSTACLE_CLEAR_ROWS
 
         # 시작 발판
         start_x = (
@@ -131,9 +143,9 @@ class Level:
         )
 
         self.platforms.append(start_platform)
-        # 최근 OBSTACLE_CLEAR_ROWS개 행의 고정 발판 x 좌표
-        self.recent_static_x = deque(
-            [[int(start_x)]], maxlen=OBSTACLE_CLEAR_ROWS
+        # 최근 OBSTACLE_CLEAR_ROWS개 행의 발판
+        self.recent_rows = deque(
+            [[start_platform]], maxlen=OBSTACLE_CLEAR_ROWS
         )
 
         # 시작 발판 위쪽으로 초기 발판을 미리 생성한다.
@@ -196,6 +208,7 @@ class Level:
         )
 
         static_x = []
+        row = []
 
         for x in selected_x:
             platform = Platform(
@@ -207,6 +220,8 @@ class Level:
                 speed = self._moving_speed(y)
                 platform.type = "moving"
                 platform.velocity_x = self.rng.choice((-speed, speed))
+                platform.min_x = WORLD_ORIGIN[0]
+                platform.max_x = WORLD_ORIGIN[0] + WORLD_WIDTH - PLATFORM_WIDTH
             else:
                 if self.rng.random() < SPRING_PLATFORM_CHANCE:
                     platform.type = "spring"
@@ -214,16 +229,20 @@ class Level:
                 static_x.append(x)
 
             self.platforms.append(platform)
+            row.append(platform)
 
-        # 점프가 닿는 아래 행들과 바로 위 행의 고정 발판 수직 경로를 비워 둔다.
-        # 움직이는 발판은 제자리 점프로 기다리면 장애물 없는 위치로 온다.
+        # 점프가 닿는 아래 행들의 모든 발판과 바로 위 행의 고정 발판이 수직 경로를 비운다.
+        # 점프 한 번이 OBSTACLE_CLEAR_ROWS개 층을 지나므로, 장애물끼리 그만큼 띄워
+        # 장애물을 옆으로 넘어가는 점프 경로에 다른 장애물이 없게 한다.
         if (
             self.next_row_index > SAFE_ROWS
+            and self.next_row_index - self.last_obstacle_row >= OBSTACLE_CLEAR_ROWS
             and self.rng.random() < OBSTACLE_CHANCE
         ):
             self._generate_obstacle(
                 y - ROW_GAP / 2,
-                [x for row in self.recent_static_x for x in row] + static_x,
+                [p for r in self.recent_rows for p in r]
+                + [p for p in row if p.velocity_x == 0],
             )
 
         if (
@@ -233,7 +252,7 @@ class Level:
         ):
             self._generate_item(self.rng.choice(static_x), y)
 
-        self.recent_static_x.append(static_x)
+        self.recent_rows.append(row)
         self.next_row_index += 1
 
     def _moving_speed(self, y: float) -> float:
@@ -246,30 +265,58 @@ class Level:
 
         return min(speed, MOVING_MAX_SPEED)
 
-    def _generate_obstacle(self, y: float, platform_xs: list[int]):
-        """두 행 사이에 고정 발판의 수직 경로를 막지 않는 위치로 장애물을 만든다."""
+    def _range_avoiding(self, platform: Platform, obstacle_x: float):
+        """장애물을 피하는 발판의 왕복 범위 (min_x, max_x). 불가능하면 None."""
+
+        left = (
+            platform.min_x,
+            min(platform.max_x, obstacle_x - PLAYER_SIZE[0] - PLATFORM_WIDTH),
+        )
+        right = (
+            max(platform.min_x, obstacle_x + OBSTACLE_SIZE[0] + PLAYER_SIZE[0]),
+            platform.max_x,
+        )
+        need = MIN_PATROL if platform.velocity_x else 0
+        ranges = [r for r in (left, right) if r[1] - r[0] >= need]
+
+        return max(ranges, key=lambda r: r[1] - r[0], default=None)
+
+    def _generate_obstacle(self, y: float, platforms: list[Platform]):
+        """두 행 사이에, 발판에서 제자리로 뛰기만 하면 절대 닿지 않는 위치로 장애물을 만든다.
+
+        움직이는 발판은 장애물 아래로 오지 않도록 한쪽으로 왕복 범위를 줄인다.
+        새 장애물은 화면 밖 위쪽에 생기므로 범위가 바뀌는 모습은 보이지 않는다.
+        """
 
         width = OBSTACLE_SIZE[0]
         left_bound = WORLD_ORIGIN[0]
         right_bound = left_bound + WORLD_WIDTH - width
 
-        # 발판 위 수직 통로(좌우로 플레이어 너비만큼 여유)를 피한다.
+        # 발판이 오가는 범위 위 수직 통로(좌우로 플레이어 너비만큼 여유)를 피한다.
         candidates = [
             x
             for x in range(left_bound, right_bound + 1, 10)
-            if all(
-                x + width <= px - PLAYER_SIZE[0]
-                or x >= px + PLATFORM_WIDTH + PLAYER_SIZE[0]
-                for px in platform_xs
-            )
+            if all(self._range_avoiding(p, x) for p in platforms)
         ]
 
         if not candidates:
             return
 
+        obstacle_x = self.rng.choice(candidates)
+        self.last_obstacle_row = self.next_row_index
+
+        for platform in platforms:
+            if platform.velocity_x:
+                platform.min_x, platform.max_x = self._range_avoiding(
+                    platform, obstacle_x
+                )
+                platform.position.x = min(
+                    max(platform.position.x, platform.min_x), platform.max_x
+                )
+
         self.obstacles.append(
             Platform(
-                position=pygame.Vector2(self.rng.choice(candidates), y),
+                position=pygame.Vector2(obstacle_x, y),
                 size=OBSTACLE_SIZE,
                 type="obstacle",
             )
@@ -286,10 +333,7 @@ class Level:
         )
 
     def _move_platforms(self, dt: float):
-        """움직이는 발판을 좌우로 이동시키고 월드 경계에서 튕긴다."""
-
-        left_bound = WORLD_ORIGIN[0]
-        right_bound = left_bound + WORLD_WIDTH - PLATFORM_WIDTH
+        """움직이는 발판을 좌우로 이동시키고 왕복 범위 끝에서 튕긴다."""
 
         for platform in self.platforms:
             if platform.velocity_x == 0:
@@ -297,11 +341,11 @@ class Level:
 
             platform.position.x += platform.velocity_x * dt
 
-            if platform.position.x < left_bound:
-                platform.position.x = left_bound
+            if platform.position.x < platform.min_x:
+                platform.position.x = platform.min_x
                 platform.velocity_x = abs(platform.velocity_x)
-            elif platform.position.x > right_bound:
-                platform.position.x = right_bound
+            elif platform.position.x > platform.max_x:
+                platform.position.x = platform.max_x
                 platform.velocity_x = -abs(platform.velocity_x)
 
     def update(self, dt: float, player_y: float):

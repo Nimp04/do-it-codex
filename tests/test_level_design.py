@@ -78,7 +78,7 @@ class LevelDesignTests(unittest.TestCase):
             self.level.update(1 / 60, 0)
         right = level_design.WORLD_WIDTH - level_design.PLATFORM_WIDTH
         for p in self.level.get_platforms():
-            self.assertTrue(0 <= p.position.x <= right)
+            self.assertTrue(0 <= p.min_x <= p.position.x <= p.max_x <= right)
 
     def test_obstacles_off_platforms_and_static_paths(self):
         level = Level()
@@ -101,13 +101,25 @@ class LevelDesignTests(unittest.TestCase):
                 # 바로 위 행(내려오며 지나는 경로)과 점프가 닿는 아래 행들만 검사한다.
                 above = 0 < p.position.y - o.position.y <= level_design.ROW_GAP / 2
                 below = top <= o.position.y < top + reach
-                if p.type == "moving" or not (above or below):
+                # 위 행의 움직이는 발판은 장애물 위에서 뛰므로 상관없다.
+                if not (below or (above and p.type != "moving")):
                     continue
-                # 고정 발판의 수직 통로는 비워 둔다.
+                # 발판이 오가는 범위 전체의 수직 통로를 비워 둔다(고정 발판은 범위가 한 점).
                 self.assertTrue(
-                    o.position.x + o.size[0] <= p.position.x - level_design.PLAYER_SIZE[0]
-                    or o.position.x >= p.position.x + p.size[0] + level_design.PLAYER_SIZE[0]
+                    o.position.x + o.size[0] <= p.min_x - level_design.PLAYER_SIZE[0]
+                    or o.position.x >= p.max_x + p.size[0] + level_design.PLAYER_SIZE[0]
                 )
+        # 장애물을 넘어가는 점프 경로(위아래 층)에 다른 장애물이 없다.
+        ys = sorted(o.position.y for o in obstacles)
+        for a, b in zip(ys, ys[1:]):
+            self.assertGreaterEqual(
+                b - a, level_design.OBSTACLE_CLEAR_ROWS * level_design.ROW_GAP
+            )
+        # 범위가 줄어든 움직이는 발판도 최소한은 움직인다.
+        for p in level.get_platforms():
+            if p.type == "moving":
+                self.assertGreaterEqual(p.max_x - p.min_x, level_design.MIN_PATROL)
+                self.assertTrue(p.min_x <= p.position.x <= p.max_x)
 
     def test_items_placed_on_static_platforms_and_cleaned_up(self):
         manager = ItemManager()
@@ -119,7 +131,7 @@ class LevelDesignTests(unittest.TestCase):
         self.assertEqual(len({i.id for i in items}), len(items))
         tops = {
             (p.position.x, p.position.y + p.size[1])
-            for p in level.get_platforms() if p.type == "normal"
+            for p in level.get_platforms() if p.type != "moving"
         }
         for i in items:
             self.assertIn(i.item_type, level_design.ITEM_TYPES)
