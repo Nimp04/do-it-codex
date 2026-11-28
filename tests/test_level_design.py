@@ -11,18 +11,44 @@ class LevelDesignTests(unittest.TestCase):
         # 충분히 많은 행을 생성해 확률적 요소가 모두 나오게 한다.
         self.level.update(0, 20000)
 
-    def test_moving_platform_ratio(self):
-        level = Level()
-        # 시드가 고정되지 않으므로 표본을 크게 잡아 비율이 흔들리지 않게 한다.
-        for _ in range(1000):
-            level._generate_next_row()
-        platforms = level.get_platforms()
-        moving = [p for p in platforms if p.type == "moving"]
+    def test_moving_platform_ratio_grows_with_height(self):
+        cap_rows = level_design.MOVING_MAX_SPEED_SCORE
+
+        def ratio(rows):
+            ys = {level_design.START_Y + r * level_design.ROW_GAP for r in rows}
+            platforms = [
+                p for level in levels for p in level.get_platforms()
+                if p.position.y in ys
+            ]
+            moving = [p for p in platforms if p.type == "moving"]
+            return len(moving) / len(platforms)
+
+        # 시드가 고정되지 않으므로 여러 맵을 모아 표본을 크게 잡는다.
+        levels = [Level() for _ in range(10)]
+        for level in levels:
+            for _ in range(cap_rows + 100):
+                level._generate_next_row()
+
+        # 시작은 반반, 최고 속도 높이 이후에는 8:2, 그 사이는 점점 늘어난다.
+        start = ratio(range(1, 31))
+        middle = ratio(range(cap_rows // 2 - 15, cap_rows // 2 + 15))
+        end = ratio(range(cap_rows, cap_rows + 100))
         self.assertAlmostEqual(
-            len(moving) / len(platforms),
-            level_design.MOVING_PLATFORM_CHANCE,
-            delta=0.1,
+            start, level_design.MOVING_PLATFORM_CHANCE_START, delta=0.08
         )
+        self.assertAlmostEqual(end, level_design.MOVING_PLATFORM_CHANCE_END, delta=0.05)
+        self.assertLess(start, middle)
+        self.assertLess(middle, end)
+
+    def test_obstacle_chance_grows_with_height(self):
+        level = Level()
+        y0 = level_design.START_Y
+        y_cap = y0 + level_design.MOVING_MAX_SPEED_SCORE * level_design.ROW_GAP
+        start, end = level_design.OBSTACLE_CHANCE_START, level_design.OBSTACLE_CHANCE_END
+        self.assertEqual(level._chance_at(y0, start, end), start)
+        self.assertEqual(level._chance_at(y_cap, start, end), end)
+        self.assertEqual(level._chance_at(y_cap * 3, start, end), end)
+        self.assertLess(start, level._chance_at((y0 + y_cap) / 2, start, end))
 
     def test_moving_speed_grows_with_height_and_is_capped(self):
         level = Level()

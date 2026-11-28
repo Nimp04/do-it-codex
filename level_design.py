@@ -39,8 +39,10 @@ PLATFORM_RULES = [
     (2, 0.2),
 ]
 
-# 발판 하나가 움직이는 발판일 확률
-MOVING_PLATFORM_CHANCE = 0.7
+# 발판 하나가 움직이는 발판일 확률. 시작 높이에서 START, 느린 발판이 최고 속도가 되는
+# 높이(MOVING_MAX_SPEED_SCORE점)에서 END가 되도록 직선으로 늘리고 그 뒤로는 유지한다.
+MOVING_PLATFORM_CHANCE_START = 0.5
+MOVING_PLATFORM_CHANCE_END = 0.8
 
 
 # 고정 발판 중 스프링 발판이 생성될 확률 (일반:스프링 = 7:3)
@@ -63,9 +65,12 @@ MOVING_SPEED_PER_HEIGHT = (
 FAST_PLATFORM_CHANCE = 0.5
 FAST_SPEED_MULTIPLIER = 1.5
 
-# 행 사이에 장애물이 생길 확률과 크기
+# 행 사이에 장애물이 생길 확률과 크기. 확률은 움직이는 발판 비율과 같은 방식으로 늘린다.
+# 한 층에는 장애물을 최대 하나만 두고, 장애물끼리 OBSTACLE_CLEAR_ROWS행 간격을 두므로
+# 실제 출현율은 행당 확률보다 낮다(START 0.25 → 100행당 약 17개, END 0.5 → 약 25개).
 # 높이는 행 간격(ROW_GAP)의 절반에서 발판 두께를 뺀 값보다 작아야 발판과 겹치지 않는다.
-OBSTACLE_CHANCE = 0.25
+OBSTACLE_CHANCE_START = 0.25
+OBSTACLE_CHANCE_END = 0.5
 OBSTACLE_SIZE = (60, 30)
 
 # 처음 몇 행은 장애물 없이 시작한다.
@@ -216,7 +221,9 @@ class Level:
                 size=(PLATFORM_WIDTH, PLATFORM_HEIGHT),
             )
 
-            if self.rng.random() < MOVING_PLATFORM_CHANCE:
+            if self.rng.random() < self._chance_at(
+                y, MOVING_PLATFORM_CHANCE_START, MOVING_PLATFORM_CHANCE_END
+            ):
                 speed = self._moving_speed(y)
                 platform.type = "moving"
                 platform.velocity_x = self.rng.choice((-speed, speed))
@@ -237,7 +244,9 @@ class Level:
         if (
             self.next_row_index > SAFE_ROWS
             and self.next_row_index - self.last_obstacle_row >= OBSTACLE_CLEAR_ROWS
-            and self.rng.random() < OBSTACLE_CHANCE
+            and self.rng.random() < self._chance_at(
+                y, OBSTACLE_CHANCE_START, OBSTACLE_CHANCE_END
+            )
         ):
             self._generate_obstacle(
                 y - ROW_GAP / 2,
@@ -254,6 +263,13 @@ class Level:
 
         self.recent_rows.append(row)
         self.next_row_index += 1
+
+    def _chance_at(self, y: float, start: float, end: float) -> float:
+        """시작 높이의 start에서 MOVING_MAX_SPEED_SCORE점 높이의 end까지 직선으로 늘어난 확률."""
+
+        progress = min((y - START_Y) / (MOVING_MAX_SPEED_SCORE * ROW_GAP), 1)
+
+        return start + (end - start) * progress
 
     def _moving_speed(self, y: float) -> float:
         """생성 높이가 높을수록 빠른 속도를 느린/빠른 두 종류로 반환한다."""
