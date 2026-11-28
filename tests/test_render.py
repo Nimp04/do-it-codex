@@ -46,7 +46,7 @@ class RendererTests(unittest.TestCase):
         hud.update("PLAYING", player)
         self.renderer.render("PLAYING", player, [platform], [obstacle], [item], hud)
         self.assertEqual([screen.get_at(point)[:3] for point in points], [
-            (55, 110, 220), (60, 160, 90), (100, 110, 125),
+            (55, 110, 220), (60, 160, 90), (65, 75, 90),
             (190, 150, 240), (190, 150, 240),
         ])
 
