@@ -30,10 +30,15 @@ class MainTests(unittest.TestCase):
         for module in (self.game.level, self.game.items, self.game.hud,
                        self.game.renderer):
             module.reset.assert_called_once_with()
-        self.game.state = main.GameState.GAME_OVER
-        main.handle_ui_action(self.game, "RESTART")
-        self.assertEqual(self.game.state, main.GameState.PLAYING)
-        self.assertEqual(self.game.player.reset.call_count, 2)
+        for state in (main.GameState.GAME_OVER, main.GameState.PAUSED):
+            with self.subTest(state=state):
+                self.game.state = state
+                self.game.player.reset.reset_mock()
+                main.handle_ui_action(self.game, "RESTART")
+                self.assertEqual(self.game.state, main.GameState.PLAYING)
+                self.game.player.reset.assert_called_once_with(
+                    self.game.level.get_spawn_position.return_value
+                )
         with self.assertRaises(ValueError):
             main.handle_ui_action(self.game, "MISSPELLED_ACTION")
 
@@ -142,7 +147,7 @@ class MainTests(unittest.TestCase):
             pygame.KEYDOWN, key=pygame.K_ESCAPE
         )])
         main.update_game(game, 0, defaultdict(bool))
-        self.assertTrue(click_button("나가기"))
+        self.assertTrue(click_button("홈으로"))
         self.assertEqual(game.state, main.GameState.WAITING)
         self.assertEqual(game.player.position, position)
         main.handle_ui_action(game, "START_GAME")
