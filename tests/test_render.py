@@ -30,7 +30,7 @@ class RendererTests(unittest.TestCase):
     def tearDown(self):
         pygame.quit()
 
-    def test_pause_draws_frozen_scene_score_inventory_and_buttons(self):
+    def test_pause_hides_scene_score_and_inventory_and_draws_buttons(self):
         player = game_object(100, 400)
         player.item_slots = [GHOST, None]
         platform = game_object(20, 400, (60, 15))
@@ -39,23 +39,27 @@ class RendererTests(unittest.TestCase):
         hud = HUD()
         hud.current_score = 3
         hud.high_score = 5
-        hud.item_slots = [GHOST, None]
         before = player.position.copy()
         camera = self.renderer.camera.position.copy()
+        points = ((101, 377), (21, 386), (351, 377), (81, 569), (455, 19))
+        screen = self.renderer.screen
+        hud.update("PLAYING", player)
+        self.renderer.render("PLAYING", player, [platform], [obstacle], [item], hud)
+        self.assertEqual([screen.get_at(point)[:3] for point in points], [
+            (55, 110, 220), (60, 160, 90), (65, 75, 90),
+            (190, 150, 240), (190, 150, 240),
+        ])
+
+        hud.update("PAUSED", player)
         with patch.object(self.renderer, "draw_text", wraps=self.renderer.draw_text) as text:
-            for state in ("PLAYING", "PAUSED"):
-                hud.update(state, player)
-                self.renderer.render(state, player, [platform], [obstacle], [item], hud)
-                pixels = [self.renderer.screen.get_at(p)[:3] for p in (
-                    (101, 377), (21, 386), (351, 377), (81, 569), (455, 19)
-                )]
-                self.assertEqual(pixels, [
-                    (55, 110, 220), (60, 160, 90), (100, 110, 125),
-                    (190, 150, 240), (190, 150, 240),
-                ])
-            text.assert_any_call("일시정지", (300, 300))
-            text.assert_any_call("Score: 3", (12, 12), centered=False)
-            self.assertEqual(self.renderer.screen.get_at((201, 381))[:3], (245, 250, 255))
+            self.renderer.render("PAUSED", player, [platform], [obstacle], [item], hud)
+        self.assertEqual(
+            [screen.get_at(point)[:3] for point in points],
+            [self.renderer.background.image.get_at(point)[:3] for point in points],
+        )
+        self.assertEqual([call.args[0] for call in text.call_args_list], [
+            "일시정지", "계속하기", "다시하기", "홈으로",
+        ])
         self.assertEqual(player.position, before)
         self.assertEqual(self.renderer.camera.position, camera)
 
@@ -356,7 +360,7 @@ class RendererTests(unittest.TestCase):
                 self.assertEqual(
                     renderer.screen.get_at((21, 151))[:3], (245, 250, 255)
                 )
-                if state in (main.GameState.PLAYING, main.GameState.PAUSED, main.GameState.GAME_OVER):
+                if state in (main.GameState.PLAYING, main.GameState.GAME_OVER):
                     text.assert_any_call("Score: 10", (12, 12), centered=False)
                     text.assert_any_call("Best: 20", (12, 44), centered=False)
                 text.reset_mock()

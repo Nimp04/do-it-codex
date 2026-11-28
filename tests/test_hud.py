@@ -67,7 +67,8 @@ class ButtonTests(unittest.TestCase):
             ("GAME_OVER", "다시하기", "RESTART"),
             ("GAME_OVER", "홈으로", "RETURN_HOME"),
             ("PAUSED", "계속하기", "RESUME"),
-            ("PAUSED", "나가기", "RETURN_HOME"),
+            ("PAUSED", "다시하기", "RESTART"),
+            ("PAUSED", "홈으로", "RETURN_HOME"),
         ]
         for state, text, action in cases:
             with self.subTest(state=state, text=text):

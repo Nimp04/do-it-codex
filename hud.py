@@ -14,7 +14,7 @@ BUTTONS = {  # 상태별 버튼: (표시 텍스트, main에 돌려줄 Action, �
         ("다시하기", "RESTART", pygame.Rect(200, 380, 200, 56)),
         ("홈으로", "RETURN_HOME", pygame.Rect(200, 450, 200, 56)),
     ],
-    "PAUSED": [ #esc눌렀을 때 상태(임의로 PAUSED로 설정)
+    "PAUSED": [
         ("계속하기", "RESUME", pygame.Rect(200, 380, 200, 56)),
         ("다시하기", "RESTART", pygame.Rect(200, 450, 200, 56)),
         ("홈으로", "RETURN_HOME", pygame.Rect(200, 520, 200, 56)),

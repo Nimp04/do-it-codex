@@ -56,7 +56,9 @@ def reset_game(game: Game):
 
 def handle_ui_action(game: Game, action: str | None):
     match game.state, action:
-        case (GameState.WAITING, "START_GAME") | (GameState.GAME_OVER, "RESTART"):
+        case (GameState.WAITING, "START_GAME") | (
+            GameState.GAME_OVER | GameState.PAUSED, "RESTART"
+        ):
             reset_game(game)
             game.state = GameState.PLAYING
         case GameState.WAITING, "OPEN_SETTING":
