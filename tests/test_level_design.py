@@ -11,18 +11,44 @@ class LevelDesignTests(unittest.TestCase):
         # 충분히 많은 행을 생성해 확률적 요소가 모두 나오게 한다.
         self.level.update(0, 20000)
 
-    def test_moving_platform_ratio(self):
-        level = Level()
-        # 시드가 고정되지 않으므로 표본을 크게 잡아 비율이 흔들리지 않게 한다.
-        for _ in range(1000):
-            level._generate_next_row()
-        platforms = level.get_platforms()
-        moving = [p for p in platforms if p.type == "moving"]
+    def test_moving_platform_ratio_grows_with_height(self):
+        cap_rows = level_design.MOVING_MAX_SPEED_SCORE
+
+        def ratio(rows):
+            ys = {level_design.START_Y + r * level_design.ROW_GAP for r in rows}
+            platforms = [
+                p for level in levels for p in level.get_platforms()
+                if p.position.y in ys
+            ]
+            moving = [p for p in platforms if p.type == "moving"]
+            return len(moving) / len(platforms)
+
+        # 시드가 고정되지 않으므로 여러 맵을 모아 표본을 크게 잡는다.
+        levels = [Level() for _ in range(10)]
+        for level in levels:
+            for _ in range(cap_rows + 100):
+                level._generate_next_row()
+
+        # 시작은 반반, 최고 속도 높이 이후에는 8:2, 그 사이는 점점 늘어난다.
+        start = ratio(range(1, 31))
+        middle = ratio(range(cap_rows // 2 - 15, cap_rows // 2 + 15))
+        end = ratio(range(cap_rows, cap_rows + 100))
         self.assertAlmostEqual(
-            len(moving) / len(platforms),
-            level_design.MOVING_PLATFORM_CHANCE,
-            delta=0.1,
+            start, level_design.MOVING_PLATFORM_CHANCE_START, delta=0.08
         )
+        self.assertAlmostEqual(end, level_design.MOVING_PLATFORM_CHANCE_END, delta=0.05)
+        self.assertLess(start, middle)
+        self.assertLess(middle, end)
+
+    def test_obstacle_chance_grows_with_height(self):
+        level = Level()
+        y0 = level_design.START_Y
+        y_cap = y0 + level_design.MOVING_MAX_SPEED_SCORE * level_design.ROW_GAP
+        start, end = level_design.OBSTACLE_CHANCE_START, level_design.OBSTACLE_CHANCE_END
+        self.assertEqual(level._chance_at(y0, start, end), start)
+        self.assertEqual(level._chance_at(y_cap, start, end), end)
+        self.assertEqual(level._chance_at(y_cap * 3, start, end), end)
+        self.assertLess(start, level._chance_at((y0 + y_cap) / 2, start, end))
 
     def test_moving_speed_grows_with_height_and_is_capped(self):
         level = Level()
@@ -78,7 +104,7 @@ class LevelDesignTests(unittest.TestCase):
             self.level.update(1 / 60, 0)
         right = level_design.WORLD_WIDTH - level_design.PLATFORM_WIDTH
         for p in self.level.get_platforms():
-            self.assertTrue(0 <= p.position.x <= right)
+            self.assertTrue(0 <= p.min_x <= p.position.x <= p.max_x <= right)
 
     def test_obstacles_off_platforms_and_static_paths(self):
         level = Level()
@@ -101,13 +127,25 @@ class LevelDesignTests(unittest.TestCase):
                 # 바로 위 행(내려오며 지나는 경로)과 점프가 닿는 아래 행들만 검사한다.
                 above = 0 < p.position.y - o.position.y <= level_design.ROW_GAP / 2
                 below = top <= o.position.y < top + reach
-                if p.type == "moving" or not (above or below):
+                # 위 행의 움직이는 발판은 장애물 위에서 뛰므로 상관없다.
+                if not (below or (above and p.type != "moving")):
                     continue
-                # 고정 발판의 수직 통로는 비워 둔다.
+                # 발판이 오가는 범위 전체의 수직 통로를 비워 둔다(고정 발판은 범위가 한 점).
                 self.assertTrue(
-                    o.position.x + o.size[0] <= p.position.x - level_design.PLAYER_SIZE[0]
-                    or o.position.x >= p.position.x + p.size[0] + level_design.PLAYER_SIZE[0]
+                    o.position.x + o.size[0] <= p.min_x - level_design.PLAYER_SIZE[0]
+                    or o.position.x >= p.max_x + p.size[0] + level_design.PLAYER_SIZE[0]
                 )
+        # 장애물을 넘어가는 점프 경로(위아래 층)에 다른 장애물이 없다.
+        ys = sorted(o.position.y for o in obstacles)
+        for a, b in zip(ys, ys[1:]):
+            self.assertGreaterEqual(
+                b - a, level_design.OBSTACLE_CLEAR_ROWS * level_design.ROW_GAP
+            )
+        # 범위가 줄어든 움직이는 발판도 최소한은 움직인다.
+        for p in level.get_platforms():
+            if p.type == "moving":
+                self.assertGreaterEqual(p.max_x - p.min_x, level_design.MIN_PATROL)
+                self.assertTrue(p.min_x <= p.position.x <= p.max_x)
 
     def test_items_placed_on_static_platforms_and_cleaned_up(self):
         manager = ItemManager()
@@ -119,7 +157,7 @@ class LevelDesignTests(unittest.TestCase):
         self.assertEqual(len({i.id for i in items}), len(items))
         tops = {
             (p.position.x, p.position.y + p.size[1])
-            for p in level.get_platforms() if p.type == "normal"
+            for p in level.get_platforms() if p.type != "moving"
         }
         for i in items:
             self.assertIn(i.item_type, level_design.ITEM_TYPES)
