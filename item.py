@@ -110,7 +110,8 @@ class ItemManager:
         item_type = slots[0]
         if item_type is None:
             return
-        slots[0] = None
+        slots[0] = slots[1]
+        slots[1] = None
         self._apply_effect(player, item_type)
 
     def _apply_effect(self, player, item_type):
